@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:murmur/core/theme/app_theme.dart';
 import 'package:murmur/core/utils/date_time_utils.dart';
 import 'package:murmur/core/utils/reminder_time_rules.dart';
+import 'package:murmur/l10n/app_localizations.dart';
 import 'package:murmur/models/reminder.dart';
 import 'package:murmur/providers/reminder_provider.dart';
 import 'package:murmur/widgets/app_date_picker.dart';
@@ -26,26 +27,27 @@ class _TodoPageState extends ConsumerState<TodoPage> {
   }
 
   Future<bool?> _confirmRemoveFromCalendar({int syncedCount = 1}) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final String content = syncedCount > 1
-        ? '其中有 $syncedCount 项已同步到日历，是否一并删除日历中的截止事项？'
-        : '此待办已同步到日历，是否一并删除日历中的截止事项？';
+        ? l10n.todoDeleteFromCalendarBodyMultiple(syncedCount)
+        : l10n.todoDeleteFromCalendarBodySingle;
 
     return showDialog<bool>(
       context: context,
-      builder: (BuildContext context) {
+      builder: (BuildContext dialogContext) {
         return AlertDialog(
-          title: const Text('同时从日历移除？'),
+          title: Text(l10n.todoDeleteFromCalendarTitle),
           content: Text(content),
           actions: <Widget>[
             TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('仅删待办'),
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: Text(l10n.todoDeleteTodoOnly),
             ),
             TextButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text(
-                '一并删除',
-                style: TextStyle(color: AppTheme.destructiveColor),
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: Text(
+                l10n.todoDeleteTodoAndCalendar,
+                style: const TextStyle(color: AppTheme.destructiveColor),
               ),
             ),
           ],
@@ -75,22 +77,23 @@ class _TodoPageState extends ConsumerState<TodoPage> {
   }
 
   Future<bool?> _confirmUnlinkFromCalendar() {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     return showDialog<bool>(
       context: context,
-      builder: (BuildContext context) {
+      builder: (BuildContext dialogContext) {
         return AlertDialog(
-          title: const Text('取消添加到日程？'),
-          content: const Text('此待办已同步到日历，是否从日历中移除对应日程？待办本身会保留。'),
+          title: Text(l10n.todoUnlinkTitle),
+          content: Text(l10n.todoUnlinkBody),
           actions: <Widget>[
             TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('保留'),
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: Text(l10n.todoKeepInCalendar),
             ),
             TextButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text(
-                '从日历移除',
-                style: TextStyle(color: AppTheme.destructiveColor),
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: Text(
+                l10n.todoRemoveFromCalendar,
+                style: const TextStyle(color: AppTheme.destructiveColor),
               ),
             ),
           ],
@@ -112,7 +115,7 @@ class _TodoPageState extends ConsumerState<TodoPage> {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('已从日历移除')),
+        SnackBar(content: Text(AppLocalizations.of(context).todoRemovedFromCalendarSnack)),
       );
       return;
     }
@@ -132,7 +135,7 @@ class _TodoPageState extends ConsumerState<TodoPage> {
         initialDate: now,
         firstDate: DateTime(now.year - 1, 1, 1),
         lastDate: DateTime(now.year + 3, 12, 31),
-        title: '添加到日程',
+        title: AppLocalizations.of(context).scheduleAddToCalendarTitle,
       );
       if (selection == null || !mounted) {
         return;
@@ -178,10 +181,11 @@ class _TodoPageState extends ConsumerState<TodoPage> {
     if (!mounted) {
       return;
     }
+    final AppLocalizations l10n = AppLocalizations.of(context);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          reminder.hasDeadline ? '已同步截止日程到日历' : '已同步到日历',
+          reminder.hasDeadline ? l10n.todoSyncedDeadlineSnack : l10n.todoSyncedToCalendarSnack,
         ),
       ),
     );
@@ -193,8 +197,9 @@ class _TodoPageState extends ConsumerState<TodoPage> {
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (BuildContext context) {
-        final MediaQueryData mediaQuery = MediaQuery.of(context);
+      builder: (BuildContext sheetContext) {
+        final AppLocalizations l10n = AppLocalizations.of(context);
+        final MediaQueryData mediaQuery = MediaQuery.of(sheetContext);
         return SingleChildScrollView(
           child: Padding(
             padding: EdgeInsets.only(
@@ -209,14 +214,14 @@ class _TodoPageState extends ConsumerState<TodoPage> {
                 TextField(
                   controller: controller,
                   autofocus: true,
-                  decoration: const InputDecoration(labelText: '编辑任务标题'),
+                  decoration: InputDecoration(labelText: l10n.todoEditTitleLabel),
                 ),
                 const SizedBox(height: 12),
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton(
-                    onPressed: () => Navigator.of(context).pop(controller.text.trim()),
-                    child: const Text('保存'),
+                    onPressed: () => Navigator.of(sheetContext).pop(controller.text.trim()),
+                    child: Text(l10n.commonSave),
                   ),
                 ),
               ],
@@ -264,7 +269,7 @@ class _TodoPageState extends ConsumerState<TodoPage> {
       return;
     }
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('已清除完成事项')),
+      SnackBar(content: Text(AppLocalizations.of(context).todoClearedCompletedSnack)),
     );
   }
 
@@ -284,11 +289,13 @@ class _TodoPageState extends ConsumerState<TodoPage> {
         .getFlexibleReminders(includeCompleted: true)
       ..removeWhere((Reminder item) => !item.isCompleted);
 
+    final AppLocalizations l10n = AppLocalizations.of(context);
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('待办'),
+        title: Text(l10n.todoPageTitle),
         actions: <Widget>[
-          AppBarTextAction(label: '新建', onPressed: _createTaskManually),
+          AppBarTextAction(label: l10n.commonCreate, onPressed: _createTaskManually),
         ],
       ),
       body: SafeArea(
@@ -299,7 +306,7 @@ class _TodoPageState extends ConsumerState<TodoPage> {
             children: <Widget>[
               const SizedBox(height: 8),
               AppSectionHeader(
-                title: '待办',
+                title: l10n.todoSectionTitle,
                 trailing: pending.isNotEmpty
                     ? Text(
                         '${pending.length}',
@@ -309,10 +316,10 @@ class _TodoPageState extends ConsumerState<TodoPage> {
               ),
               Expanded(
                 child: pending.isEmpty && completed.isEmpty
-                    ? const AppEmptyState(
+                    ? AppEmptyState(
                         icon: Icons.checklist_outlined,
-                        title: '还没有待办事项',
-                        subtitle: '点击右上角「新建」添加',
+                        title: l10n.todoEmptyTitle,
+                        subtitle: l10n.todoEmptySubtitle,
                       )
                     : ListView(
                         children: <Widget>[
@@ -388,7 +395,7 @@ class _TodoPageState extends ConsumerState<TodoPage> {
                                           const SizedBox(width: 8),
                                           Expanded(
                                             child: Text(
-                                              '已完成',
+                                              l10n.todoCompletedSection,
                                               style: Theme.of(context).textTheme.titleSmall,
                                             ),
                                           ),
@@ -414,7 +421,7 @@ class _TodoPageState extends ConsumerState<TodoPage> {
                                       alignment: Alignment.centerRight,
                                       child: TextButton(
                                         onPressed: _clearCompleted,
-                                        child: const Text('清除已完成'),
+                                        child: Text(l10n.todoClearCompleted),
                                       ),
                                     ),
                                   ),
@@ -475,6 +482,7 @@ class _TodoCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final Color textColor = reminder.isCompleted
         ? AppTheme.secondaryLabelColor
         : AppTheme.textPrimaryColor;
@@ -524,7 +532,9 @@ class _TodoCard extends StatelessWidget {
                               ),
                               const SizedBox(width: 4),
                               Text(
-                                '截止 ${DateTimeUtils.formatDateTime(reminder.deadlineAt!)}',
+                                l10n.todoDeadlineLabel(
+                                  DateTimeUtils.formatDateTime(reminder.deadlineAt!),
+                                ),
                                 style: Theme.of(context).textTheme.labelSmall?.copyWith(
                                       color: reminder.isCompleted
                                           ? AppTheme.secondaryLabelColor
@@ -571,7 +581,7 @@ class _TodoCard extends StatelessWidget {
                                     frequency: reminder.remindFrequency,
                                     repeatDays: reminder.remindRepeatDays,
                                   )
-                                    : '已设提醒',
+                                    : l10n.todoReminderSet,
                                 style: Theme.of(context).textTheme.labelSmall?.copyWith(
                                       color: Theme.of(context).colorScheme.primary,
                                     ),
@@ -581,7 +591,7 @@ class _TodoCard extends StatelessWidget {
                         ],
                         const SizedBox(height: 2),
                         Text(
-                          '创建于 ${DateTimeUtils.formatDate(reminder.createdAt)}',
+                          l10n.todoCreatedAt(DateTimeUtils.formatDate(reminder.createdAt)),
                           style: Theme.of(context).textTheme.labelSmall,
                         ),
                       ],

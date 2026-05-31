@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:murmur/core/theme/app_theme.dart';
 import 'package:murmur/core/utils/date_time_utils.dart';
 import 'package:murmur/core/utils/reminder_time_rules.dart';
+import 'package:murmur/l10n/app_localizations.dart';
 import 'package:murmur/models/reminder.dart';
 import 'package:murmur/providers/reminder_provider.dart';
 import 'package:murmur/services/emotion_service.dart';
@@ -293,7 +294,7 @@ class _CreateReminderPageState extends ConsumerState<CreateReminderPage> {
     final String title = _titleController.text.trim();
     if (title.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请先填写日程内容')),
+        SnackBar(content: Text(AppLocalizations.of(context).reminderSnackFillContent)),
       );
       return;
     }
@@ -332,7 +333,7 @@ class _CreateReminderPageState extends ConsumerState<CreateReminderPage> {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('录音权限不可用')),
+        SnackBar(content: Text(AppLocalizations.of(context).reminderSnackMicPermission)),
       );
     }
   }
@@ -360,38 +361,24 @@ class _CreateReminderPageState extends ConsumerState<CreateReminderPage> {
   }
 
   String? _eventDurationSummary() {
+    final AppLocalizations l10n = AppLocalizationsBinding.instance;
     final int diff = timeRangeMinutes(_endTime) - timeRangeMinutes(_startTime);
     if (diff <= 0) {
       return null;
     }
     if (diff % 60 == 0) {
-      return '时长 ${diff ~/ 60} 小时';
+      return l10n.reminderDurationHours(diff ~/ 60);
     }
     if (diff < 60) {
-      return '时长 $diff 分钟';
+      return l10n.reminderDurationMinutes(diff);
     }
-    return '时长 ${diff ~/ 60} 小时 ${diff % 60} 分钟';
+    return l10n.reminderDurationHoursMinutes(diff ~/ 60, diff % 60);
   }
 
-  String _remindOffsetLabel(String offset) {
-    return switch (offset) {
-      ReminderTimeRules.offsetAtTime => '准时',
-      ReminderTimeRules.offsetBefore15m => '提前 15 分钟',
-      ReminderTimeRules.offsetBefore1h => '提前 1 小时',
-      ReminderTimeRules.offsetCustom => '自定义',
-      _ => '准时',
-    };
-  }
+  String _remindOffsetLabel(String offset) => ReminderTimeRules.offsetLabel(offset);
 
-  String _remindFrequencyLabel(String frequency) {
-    return switch (frequency) {
-      'once' => '不重复',
-      'daily' => '每天',
-      'weekly' => '每周',
-      'monthly' => '每月',
-      _ => '不重复',
-    };
-  }
+  String _remindFrequencyLabel(String frequency) =>
+      ReminderTimeRules.frequencyLabel(frequency);
 
   String _presetVoiceLabel(String voiceId) {
     for (final VoiceOption voice in VoiceService.presetVoices) {
@@ -399,7 +386,7 @@ class _CreateReminderPageState extends ConsumerState<CreateReminderPage> {
         return voice.name;
       }
     }
-    return '默认亲声';
+    return AppLocalizationsBinding.instance.voiceDefaultPreset;
   }
 
   DateTime _defaultCustomRemindAt() {
@@ -411,15 +398,16 @@ class _CreateReminderPageState extends ConsumerState<CreateReminderPage> {
 
   Future<void> _pickRemindOffset() async {
     final double scrollOffset = _currentScrollOffset;
-    const List<AppPickerOption<String>> options = <AppPickerOption<String>>[
-      AppPickerOption(value: ReminderTimeRules.offsetAtTime, label: '准时'),
-      AppPickerOption(value: ReminderTimeRules.offsetBefore15m, label: '提前 15 分钟'),
-      AppPickerOption(value: ReminderTimeRules.offsetBefore1h, label: '提前 1 小时'),
-      AppPickerOption(value: ReminderTimeRules.offsetCustom, label: '自定义'),
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    final List<AppPickerOption<String>> options = <AppPickerOption<String>>[
+      AppPickerOption(value: ReminderTimeRules.offsetAtTime, label: l10n.remindOffsetOnTime),
+      AppPickerOption(value: ReminderTimeRules.offsetBefore15m, label: l10n.remindOffsetBefore15m),
+      AppPickerOption(value: ReminderTimeRules.offsetBefore1h, label: l10n.remindOffsetBefore1h),
+      AppPickerOption(value: ReminderTimeRules.offsetCustom, label: l10n.remindOffsetCustom),
     ];
     final String? picked = await showAppOptionPicker<String>(
       context: context,
-      title: '提醒时机',
+      title: l10n.reminderRemindOffset,
       options: options,
       current: _remindOffset,
     );
@@ -440,40 +428,43 @@ class _CreateReminderPageState extends ConsumerState<CreateReminderPage> {
 
   Future<void> _pickRemindFrequency() async {
     final double scrollOffset = _currentScrollOffset;
-    const List<AppPickerOption<String>> options = <AppPickerOption<String>>[
-      AppPickerOption(value: 'once', label: '不重复'),
-      AppPickerOption(value: 'daily', label: '每天'),
-      AppPickerOption(value: 'weekly', label: '每周'),
-      AppPickerOption(value: 'monthly', label: '每月'),
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    final List<AppPickerOption<String>> options = <AppPickerOption<String>>[
+      AppPickerOption(value: 'once', label: l10n.remindFrequencyOnce),
+      AppPickerOption(value: 'daily', label: l10n.remindFrequencyDaily),
+      AppPickerOption(value: 'weekly', label: l10n.remindFrequencyWeekly),
+      AppPickerOption(value: 'monthly', label: l10n.remindFrequencyMonthly),
     ];
     final String? picked = await showAppOptionPicker<String>(
       context: context,
-      title: '重复',
+      title: l10n.reminderRepeat,
       options: options,
       current: _remindFrequency,
     );
     if (picked == null || !mounted) {
       return;
     }
-    setState(() => _remindFrequency = picked);
-    if (_remindOffset == ReminderTimeRules.offsetCustom) {
-      final DateTime current = _customRemindAt ?? _defaultCustomRemindAt();
-      _customRemindAt = ReminderTimeRules.normalizeCustomRemindForFrequency(
-        current: current,
-        frequency: picked,
-        anchorDate: _eventDate,
-      );
+    setState(() {
+      _remindFrequency = picked;
+      if (_remindOffset == ReminderTimeRules.offsetCustom) {
+        final DateTime current = _customRemindAt ?? _defaultCustomRemindAt();
+        _customRemindAt = ReminderTimeRules.normalizeCustomRemindForFrequency(
+          current: current,
+          frequency: picked,
+          anchorDate: _eventDate,
+        );
+      }
       if (ReminderTimeRules.usesRepeatDaySelection(picked)) {
         _remindRepeatDays = ReminderTimeRules.defaultRepeatDaysForFrequency(
           frequency: picked,
-          anchorDate: _eventDate,
+          anchorDate: _remindOffset == ReminderTimeRules.offsetCustom
+              ? (_customRemindAt ?? _defaultCustomRemindAt())
+              : (_startDateTime ?? _eventDate),
         );
       } else {
         _remindRepeatDays = <int>[];
       }
-    } else {
-      _remindRepeatDays = <int>[];
-    }
+    });
     _restoreScrollOffset(scrollOffset);
   }
 
@@ -493,7 +484,7 @@ class _CreateReminderPageState extends ConsumerState<CreateReminderPage> {
         : VoiceService.defaultVoiceId;
     final String? picked = await showAppOptionPicker<String>(
       context: context,
-      title: '提醒声音',
+      title: AppLocalizations.of(context).reminderVoiceSound,
       options: options,
       current: current,
     );
@@ -505,11 +496,12 @@ class _CreateReminderPageState extends ConsumerState<CreateReminderPage> {
   }
 
   bool get _canSave {
+    if (_remindEnabled &&
+        ReminderTimeRules.usesRepeatDaySelection(_remindFrequency) &&
+        _remindRepeatDays.isEmpty) {
+      return false;
+    }
     if (_remindEnabled && _remindOffset == ReminderTimeRules.offsetCustom) {
-      if (ReminderTimeRules.usesRepeatDaySelection(_remindFrequency) &&
-          _remindRepeatDays.isEmpty) {
-        return false;
-      }
       return _customRemindAt != null;
     }
     if (_remindEnabled && _computedRemindAt == null) {
@@ -690,25 +682,27 @@ class _CreateReminderPageState extends ConsumerState<CreateReminderPage> {
   }
 
   Widget _buildVoiceModeSelector() {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: <Widget>[
-          Expanded(child: _buildVoiceModeButton(label: '文案亲声', mode: _VoiceRemindMode.textAndPreset)),
+          Expanded(child: _buildVoiceModeButton(label: l10n.reminderVoiceModeText, mode: _VoiceRemindMode.textAndPreset)),
           const SizedBox(width: 10),
-          Expanded(child: _buildVoiceModeButton(label: '录制亲声', mode: _VoiceRemindMode.record)),
+          Expanded(child: _buildVoiceModeButton(label: l10n.reminderVoiceModeRecord, mode: _VoiceRemindMode.record)),
         ],
       ),
     );
   }
 
   Widget _buildCustomRemindPicker() {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final DateTime base = _customRemindAt ?? _defaultCustomRemindAt();
     if (_remindFrequency == 'daily') {
       return AppInlineTimePicker(
         time: TimeOfDay.fromDateTime(base),
-        sectionLabel: '提醒时间',
+        sectionLabel: l10n.reminderSectionLabelRemindTime,
         onChanged: (TimeOfDay picked) {
           _setStatePreservingScroll(() {
             _customRemindAt = DateTime(
@@ -723,32 +717,20 @@ class _CreateReminderPageState extends ConsumerState<CreateReminderPage> {
       );
     }
     if (ReminderTimeRules.usesRepeatDaySelection(_remindFrequency)) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          AppInlineRepeatDaysPicker(
-            frequency: _remindFrequency,
-            selectedDays: _remindRepeatDays,
-            onChanged: (List<int> days) {
-              _setStatePreservingScroll(() => _remindRepeatDays = days);
-            },
-          ),
-          AppInlineTimePicker(
-            time: TimeOfDay.fromDateTime(base),
-            sectionLabel: '提醒时间',
-            onChanged: (TimeOfDay picked) {
-              _setStatePreservingScroll(() {
-                _customRemindAt = DateTime(
-                  base.year,
-                  base.month,
-                  base.day,
-                  picked.hour,
-                  picked.minute,
-                );
-              });
-            },
-          ),
-        ],
+      return AppInlineTimePicker(
+        time: TimeOfDay.fromDateTime(base),
+        sectionLabel: l10n.reminderSectionLabelRemindTime,
+        onChanged: (TimeOfDay picked) {
+          _setStatePreservingScroll(() {
+            _customRemindAt = DateTime(
+              base.year,
+              base.month,
+              base.day,
+              picked.hour,
+              picked.minute,
+            );
+          });
+        },
       );
     }
 
@@ -764,6 +746,7 @@ class _CreateReminderPageState extends ConsumerState<CreateReminderPage> {
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final DateTime? remindPreview = _computedRemindAt;
     final ColorScheme scheme = Theme.of(context).colorScheme;
 
@@ -780,11 +763,11 @@ class _CreateReminderPageState extends ConsumerState<CreateReminderPage> {
                 children: <Widget>[
                   TextButton(
                     onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('取消'),
+                    child: Text(l10n.commonCancel),
                   ),
                   Expanded(
                     child: Text(
-                      _isEditing ? '编辑日程' : '创建日程',
+                      _isEditing ? l10n.reminderSheetEdit : l10n.reminderSheetCreate,
                       textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
@@ -792,7 +775,7 @@ class _CreateReminderPageState extends ConsumerState<CreateReminderPage> {
                   TextButton(
                     onPressed: _canSave ? _saveReminder : null,
                     child: Text(
-                      '保存',
+                      l10n.commonSave,
                       style: TextStyle(
                         color: _canSave ? scheme.primary : scheme.onSurfaceVariant,
                         fontWeight: FontWeight.w600,
@@ -809,8 +792,8 @@ class _CreateReminderPageState extends ConsumerState<CreateReminderPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
-              const AppSectionHeader(
-                title: '日程',
+              AppSectionHeader(
+                title: l10n.reminderSectionEvent,
                 style: AppSectionHeaderStyle.caption,
               ),
               AppDetailSection(
@@ -818,13 +801,13 @@ class _CreateReminderPageState extends ConsumerState<CreateReminderPage> {
                   AppDetailTextField(
                     icon: Icons.edit_outlined,
                     iconColor: scheme.primary,
-                    label: '内容',
+                    label: l10n.reminderFieldContent,
                     controller: _titleController,
-                    hintText: '例如：给妈妈打电话',
+                    hintText: l10n.reminderHintContent,
                     textInputAction: TextInputAction.next,
                     validator: (String? value) {
                       if ((value ?? '').trim().isEmpty) {
-                        return '请填写提醒内容';
+                        return l10n.reminderValidationContent;
                       }
                       return null;
                     },
@@ -832,9 +815,9 @@ class _CreateReminderPageState extends ConsumerState<CreateReminderPage> {
                   AppDetailTextField(
                     icon: Icons.notes_outlined,
                     iconColor: AppTheme.secondaryLabelColor,
-                    label: '备注',
+                    label: l10n.reminderFieldNotes,
                     controller: _notesController,
-                    hintText: '例如：妈妈的手机号',
+                    hintText: l10n.reminderHintNotes,
                     maxLines: 2,
                     showDivider: false,
                     textInputAction: TextInputAction.next,
@@ -842,8 +825,8 @@ class _CreateReminderPageState extends ConsumerState<CreateReminderPage> {
                 ],
               ),
               const SizedBox(height: 12),
-              const AppSectionHeader(
-                title: '时间',
+              AppSectionHeader(
+                title: l10n.reminderSectionTime,
                 style: AppSectionHeaderStyle.caption,
               ),
               AppDetailSection(
@@ -852,7 +835,7 @@ class _CreateReminderPageState extends ConsumerState<CreateReminderPage> {
                     AppDetailSwitchTile(
                       icon: Icons.wb_sunny_outlined,
                       iconColor: scheme.primary,
-                      title: '全天',
+                      title: l10n.reminderAllDay,
                       value: _isAllDay,
                       onChanged: (bool value) {
                         _setStatePreservingScroll(() {
@@ -866,7 +849,7 @@ class _CreateReminderPageState extends ConsumerState<CreateReminderPage> {
                   AppDetailTile(
                     icon: Icons.calendar_today_outlined,
                     iconColor: scheme.primary,
-                    title: '日期',
+                    title: l10n.reminderFieldDate,
                     value: inlineDatePickerSummary(_eventDate),
                     onTap: () => _toggleExpandedField(_ExpandedField.eventDate),
                     expanded: _expandedField == _ExpandedField.eventDate,
@@ -886,7 +869,7 @@ class _CreateReminderPageState extends ConsumerState<CreateReminderPage> {
                     AppDetailTile(
                       icon: Icons.access_time,
                       iconColor: AppTheme.deadlineColor,
-                      title: '截止时间',
+                      title: l10n.reminderFieldDeadline,
                       value: _startTime.format(context),
                       onTap: () => _toggleExpandedField(_ExpandedField.eventTime),
                       expanded: _expandedField == _ExpandedField.eventTime,
@@ -895,7 +878,7 @@ class _CreateReminderPageState extends ConsumerState<CreateReminderPage> {
                     if (_expandedField == _ExpandedField.eventTime)
                       AppInlineTimePicker(
                         time: _startTime,
-                        sectionLabel: '截止时间',
+                        sectionLabel: l10n.reminderFieldDeadline,
                         onChanged: (TimeOfDay time) {
                           _setStatePreservingScroll(() => _startTime = time);
                         },
@@ -904,7 +887,7 @@ class _CreateReminderPageState extends ConsumerState<CreateReminderPage> {
                     AppDetailTile(
                       icon: Icons.access_time,
                       iconColor: AppTheme.iosBlue,
-                      title: '时间',
+                      title: l10n.reminderFieldTime,
                       value: _eventTimeRangeSummary(context),
                       subtitle: _expandedField == _ExpandedField.eventTime
                           ? null
@@ -933,13 +916,13 @@ class _CreateReminderPageState extends ConsumerState<CreateReminderPage> {
                   _endDateTime != null &&
                   !_endDateTime!.isAfter(_startDateTime!))
                 AppFootnote(
-                  text: '结束时间必须晚于开始时间',
+                  text: l10n.reminderTimeRangeInvalid,
                   color: scheme.error,
                   padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),
                 ),
               const SizedBox(height: 12),
-              const AppSectionHeader(
-                title: '提醒',
+              AppSectionHeader(
+                title: l10n.reminderSectionRemind,
                 style: AppSectionHeaderStyle.caption,
               ),
               AppDetailSection(
@@ -947,8 +930,8 @@ class _CreateReminderPageState extends ConsumerState<CreateReminderPage> {
                   AppDetailSwitchTile(
                     icon: Icons.notifications_outlined,
                     iconColor: AppTheme.destructiveColor,
-                    title: '需要提醒',
-                    subtitle: '提醒时间可以与日程时间不同',
+                    title: l10n.reminderNeedRemind,
+                    subtitle: l10n.reminderNeedRemindSubtitleEvent,
                     value: _remindEnabled,
                     showDivider: _remindEnabled,
                     onChanged: (bool value) {
@@ -964,7 +947,7 @@ class _CreateReminderPageState extends ConsumerState<CreateReminderPage> {
                     AppDetailTile(
                       icon: Icons.schedule_outlined,
                       iconColor: AppTheme.iosBlue,
-                      title: '提醒时机',
+                      title: l10n.reminderRemindOffset,
                       value: _remindOffsetLabel(_remindOffset),
                       onTap: _pickRemindOffset,
                     ),
@@ -972,7 +955,7 @@ class _CreateReminderPageState extends ConsumerState<CreateReminderPage> {
                       AppDetailTile(
                         icon: Icons.notifications_active_outlined,
                         iconColor: AppTheme.destructiveColor,
-                        title: '自定义时间',
+                        title: l10n.reminderCustomTime,
                         value: ReminderTimeRules.customRemindTileValue(
                           remindAt: _customRemindAt,
                           frequency: _remindFrequency,
@@ -989,7 +972,7 @@ class _CreateReminderPageState extends ConsumerState<CreateReminderPage> {
                     AppDetailTile(
                       icon: Icons.repeat,
                       iconColor: AppTheme.secondaryLabelColor,
-                      title: '重复',
+                      title: l10n.reminderRepeat,
                       value: _remindFrequencyLabel(_remindFrequency),
                       subtitle: remindPreview != null
                           ? ReminderTimeRules.remindPreviewLabel(
@@ -999,15 +982,25 @@ class _CreateReminderPageState extends ConsumerState<CreateReminderPage> {
                             )
                           : null,
                       onTap: _pickRemindFrequency,
-                      showDivider: false,
+                      expanded: ReminderTimeRules.usesRepeatDaySelection(_remindFrequency),
+                      showDivider:
+                          !ReminderTimeRules.usesRepeatDaySelection(_remindFrequency),
                     ),
+                    if (ReminderTimeRules.usesRepeatDaySelection(_remindFrequency))
+                      AppInlineRepeatDaysPicker(
+                        frequency: _remindFrequency,
+                        selectedDays: _remindRepeatDays,
+                        onChanged: (List<int> days) {
+                          _setStatePreservingScroll(() => _remindRepeatDays = days);
+                        },
+                      ),
                   ],
                 ],
               ),
               if (_remindEnabled) ...<Widget>[
                 const SizedBox(height: 12),
-                const AppSectionHeader(
-                  title: '亲声提醒',
+                AppSectionHeader(
+                  title: l10n.reminderSectionVoice,
                   style: AppSectionHeaderStyle.caption,
                 ),
                 AppDetailSection(
@@ -1015,8 +1008,8 @@ class _CreateReminderPageState extends ConsumerState<CreateReminderPage> {
                     AppDetailSwitchTile(
                       icon: Icons.graphic_eq_rounded,
                       iconColor: scheme.primary,
-                      title: '语音提醒',
-                      subtitle: '文案亲声或录制亲声',
+                      title: l10n.reminderVoiceRemind,
+                      subtitle: l10n.reminderVoiceRemindSubtitle,
                       value: _voiceRemindEnabled,
                       showDivider: _voiceRemindEnabled,
                       onChanged: (bool value) {
@@ -1035,24 +1028,24 @@ class _CreateReminderPageState extends ConsumerState<CreateReminderPage> {
                         AppDetailTextField(
                           icon: Icons.chat_bubble_outline,
                           iconColor: AppTheme.secondaryLabelColor,
-                          label: '提醒文案',
+                          label: l10n.reminderRemindText,
                           controller: _remindTextController,
-                          hintText: '亲声播报时朗读',
+                          hintText: l10n.reminderRemindTextHint,
                           onChanged: (_) => setState(() {}),
                         ),
                         AppDetailActionTile(
                           icon: Icons.content_copy_outlined,
-                          label: '与日程内容相同',
+                          label: l10n.reminderSameAsEvent,
                           compact: true,
                           onTap: _copyRemindTextFromTitle,
                         ),
                         AppDetailTile(
                           icon: Icons.record_voice_over_outlined,
                           iconColor: scheme.primary,
-                          title: '提醒声音',
+                          title: l10n.reminderVoiceSound,
                           value: _presetVoiceValid
                               ? _presetVoiceLabel(_voiceSelection)
-                              : '请选择',
+                              : l10n.commonPleaseSelect,
                           placeholder: !_presetVoiceValid,
                           onTap: _pickPresetVoice,
                           showDivider: false,
@@ -1067,7 +1060,7 @@ class _CreateReminderPageState extends ConsumerState<CreateReminderPage> {
                                 child: FilledButton.icon(
                                   onPressed: _toggleRecording,
                                   icon: Icon(_isRecording ? Icons.stop : Icons.mic),
-                                  label: Text(_isRecording ? '停止录音' : '开始录音'),
+                                  label: Text(_isRecording ? l10n.reminderRecordStop : l10n.reminderRecordStart),
                                 ),
                               ),
                               if (_recordingPath != null &&
@@ -1078,7 +1071,7 @@ class _CreateReminderPageState extends ConsumerState<CreateReminderPage> {
                                   child: OutlinedButton.icon(
                                     onPressed: _previewRecording,
                                     icon: const Icon(Icons.play_arrow_rounded),
-                                    label: const Text('试听录音'),
+                                    label: Text(l10n.reminderPreviewRecording),
                                   ),
                                 ),
                               ],
@@ -1092,17 +1085,17 @@ class _CreateReminderPageState extends ConsumerState<CreateReminderPage> {
                     _voiceRemindMode == _VoiceRemindMode.textAndPreset &&
                     (_remindTextController.text.trim().isEmpty || !_presetVoiceValid))
                   AppFootnote(
-                    text: '请填写提醒文案并选择提醒声音',
+                    text: l10n.reminderValidationVoice,
                     color: scheme.error,
                     padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),
                   ),
                 if (_voiceRemindEnabled && _voiceRemindMode == _VoiceRemindMode.record)
                   AppFootnote(
                     text: _isRecording
-                        ? '正在录音…最多 30 秒'
+                        ? l10n.reminderRecordingInProgress
                         : (_recordingPath != null && _recordingPath!.isNotEmpty
-                            ? '已录制亲声，保存后将用于提醒'
-                            : '请先录制亲声后再保存'),
+                            ? l10n.reminderRecordingSaved
+                            : l10n.reminderRecordingRequired),
                     color: _isRecording
                         ? AppTheme.primaryColor
                         : (_recordingPath != null && _recordingPath!.isNotEmpty
@@ -1116,7 +1109,7 @@ class _CreateReminderPageState extends ConsumerState<CreateReminderPage> {
                 width: double.infinity,
                 child: FilledButton(
                   onPressed: _canSave ? _saveReminder : null,
-                  child: Text(_isEditing ? '保存修改' : '保存'),
+                  child: Text(_isEditing ? l10n.reminderSaveChanges : l10n.commonSave),
                 ),
               ),
                   ],

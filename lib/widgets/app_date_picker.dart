@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:murmur/core/theme/app_theme.dart';
 import 'package:murmur/core/utils/date_time_utils.dart';
+import 'package:murmur/l10n/app_localizations.dart';
 import 'package:murmur/widgets/app_ui.dart';
 import 'package:murmur/widgets/inline_date_picker.dart';
 import 'package:murmur/widgets/inline_time_range_picker.dart';
@@ -24,7 +25,7 @@ Future<AppScheduleSelection?> showAppSchedulePicker({
   required DateTime initialDate,
   required DateTime firstDate,
   required DateTime lastDate,
-  String title = '添加到日程',
+  String? title,
 }) {
   DateTime selectedDay = DateTimeUtils.startOfDay(initialDate);
   final DateTime minDay = DateTimeUtils.startOfDay(firstDate);
@@ -49,9 +50,11 @@ Future<AppScheduleSelection?> showAppSchedulePicker({
         height: sheetHeight,
         child: StatefulBuilder(
           builder: (BuildContext context, StateSetter setModalState) {
+            final AppLocalizations l10n = AppLocalizations.of(context);
             final ColorScheme scheme = Theme.of(context).colorScheme;
             final bool isTimeRangeValid = !hasSpecificTime ||
                 timeRangeMinutes(endTime) > timeRangeMinutes(startTime);
+            final String sheetTitle = title ?? l10n.scheduleAddToCalendarTitle;
             String timeRangeSummary() {
               return '${startTime.format(context)} – ${endTime.format(context)}';
             }
@@ -65,11 +68,11 @@ Future<AppScheduleSelection?> showAppSchedulePicker({
                     children: <Widget>[
                       TextButton(
                         onPressed: () => Navigator.of(sheetContext).pop(),
-                        child: const Text('取消'),
+                        child: Text(l10n.commonCancel),
                       ),
                       Expanded(
                         child: Text(
-                          title,
+                          sheetTitle,
                           textAlign: TextAlign.center,
                           style: Theme.of(context).textTheme.titleMedium,
                         ),
@@ -86,7 +89,7 @@ Future<AppScheduleSelection?> showAppSchedulePicker({
                                 )
                             : null,
                         child: Text(
-                          '完成',
+                          l10n.commonDone,
                           style: TextStyle(
                             color: isTimeRangeValid
                                 ? scheme.primary
@@ -109,7 +112,7 @@ Future<AppScheduleSelection?> showAppSchedulePicker({
                             AppDetailTile(
                               icon: Icons.calendar_today_outlined,
                               iconColor: scheme.primary,
-                              title: '日期',
+                              title: l10n.reminderFieldDate,
                               value: inlineDatePickerSummary(selectedDay),
                               showDivider: false,
                             ),
@@ -125,8 +128,8 @@ Future<AppScheduleSelection?> showAppSchedulePicker({
                             AppDetailSwitchTile(
                               icon: Icons.access_time,
                               iconColor: AppTheme.iosBlue,
-                              title: '具体时间',
-                              subtitle: hasSpecificTime ? null : '未开启时为全天日程',
+                              title: l10n.scheduleSpecificTime,
+                              subtitle: hasSpecificTime ? null : l10n.scheduleAllDayWhenOff,
                               value: hasSpecificTime,
                               showDivider: hasSpecificTime,
                               onChanged: (bool value) {
@@ -147,11 +150,11 @@ Future<AppScheduleSelection?> showAppSchedulePicker({
                               AppDetailTile(
                                 icon: Icons.access_time,
                                 iconColor: AppTheme.iosBlue,
-                                title: '时间',
+                                title: l10n.reminderFieldTime,
                                 value: timeRangeSummary(),
                                 subtitle: isTimeRangeValid
                                     ? timeRangeDurationLabel(startTime, endTime)
-                                    : '结束时间必须晚于开始时间',
+                                    : l10n.reminderTimeRangeInvalid,
                                 showDivider: false,
                               ),
                               AppInlineTimeRangePicker(
@@ -169,7 +172,7 @@ Future<AppScheduleSelection?> showAppSchedulePicker({
                         ),
                         if (hasSpecificTime && !isTimeRangeValid)
                           AppFootnote(
-                            text: '结束时间必须晚于开始时间',
+                            text: l10n.reminderTimeRangeInvalid,
                             color: scheme.error,
                             padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),
                           ),
@@ -192,7 +195,7 @@ Future<DateTime?> showAppDatePicker({
   required DateTime initialDate,
   required DateTime firstDate,
   required DateTime lastDate,
-  String title = '选择日期',
+  String? title,
 }) {
   DateTime selectedDay = DateTimeUtils.startOfDay(initialDate);
   final DateTime minDay = DateTimeUtils.startOfDay(firstDate);
@@ -206,7 +209,9 @@ Future<DateTime?> showAppDatePicker({
     builder: (BuildContext sheetContext) {
       return StatefulBuilder(
         builder: (BuildContext context, StateSetter setModalState) {
+          final AppLocalizations l10n = AppLocalizations.of(context);
           final ColorScheme scheme = Theme.of(context).colorScheme;
+          final String sheetTitle = title ?? l10n.datePickerSelectDate;
 
           return Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -220,11 +225,11 @@ Future<DateTime?> showAppDatePicker({
                     children: <Widget>[
                       TextButton(
                         onPressed: () => Navigator.of(sheetContext).pop(),
-                        child: const Text('取消'),
+                        child: Text(l10n.commonCancel),
                       ),
                       Expanded(
                         child: Text(
-                          title,
+                          sheetTitle,
                           textAlign: TextAlign.center,
                           style: Theme.of(context).textTheme.titleMedium,
                         ),
@@ -232,7 +237,7 @@ Future<DateTime?> showAppDatePicker({
                       TextButton(
                         onPressed: () => Navigator.of(sheetContext).pop(selectedDay),
                         child: Text(
-                          '完成',
+                          l10n.commonDone,
                           style: TextStyle(
                             color: scheme.primary,
                             fontWeight: FontWeight.w600,
@@ -247,7 +252,7 @@ Future<DateTime?> showAppDatePicker({
                     AppDetailTile(
                       icon: Icons.calendar_today_outlined,
                       iconColor: scheme.primary,
-                      title: '日期',
+                      title: l10n.reminderFieldDate,
                       value: inlineDatePickerSummary(selectedDay),
                       showDivider: false,
                     ),

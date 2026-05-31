@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:murmur/core/theme/app_theme.dart';
+import 'package:murmur/l10n/app_localizations.dart';
 import 'package:murmur/widgets/app_ui.dart';
 import 'package:murmur/widgets/inline_time_range_picker.dart';
 
@@ -29,6 +30,7 @@ Future<EventTimeRangeResult?> showEventTimeRangeSheet({
 
       return StatefulBuilder(
         builder: (BuildContext context, StateSetter setModalState) {
+          final AppLocalizations l10n = AppLocalizations.of(context);
           final ColorScheme scheme = Theme.of(context).colorScheme;
           final bool isValid = timeRangeMinutes(end) > timeRangeMinutes(start);
 
@@ -48,11 +50,11 @@ Future<EventTimeRangeResult?> showEventTimeRangeSheet({
                     children: <Widget>[
                       TextButton(
                         onPressed: () => Navigator.of(sheetContext).pop(),
-                        child: const Text('取消'),
+                        child: Text(l10n.commonCancel),
                       ),
                       Expanded(
                         child: Text(
-                          '选择时间',
+                          l10n.timeRangeSheetTitle,
                           textAlign: TextAlign.center,
                           style: Theme.of(context).textTheme.titleMedium,
                         ),
@@ -64,7 +66,7 @@ Future<EventTimeRangeResult?> showEventTimeRangeSheet({
                                 )
                             : null,
                         child: Text(
-                          '完成',
+                          l10n.commonDone,
                           style: TextStyle(
                             color: isValid ? scheme.primary : scheme.onSurfaceVariant,
                             fontWeight: FontWeight.w600,

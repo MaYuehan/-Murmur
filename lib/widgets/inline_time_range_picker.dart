@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:murmur/core/theme/app_theme.dart';
+import 'package:murmur/l10n/app_localizations.dart';
 import 'package:murmur/widgets/inline_date_picker.dart';
 
 enum _ActiveTimeField { start, end }
@@ -12,11 +13,13 @@ class _DurationOption {
   final Duration duration;
 }
 
-const List<_DurationOption> _durationOptions = <_DurationOption>[
-  _DurationOption(label: '30 分钟', duration: Duration(minutes: 30)),
-  _DurationOption(label: '1 小时', duration: Duration(hours: 1)),
-  _DurationOption(label: '2 小时', duration: Duration(hours: 2)),
-];
+List<_DurationOption> _durationOptions(AppLocalizations l10n) {
+  return <_DurationOption>[
+    _DurationOption(label: l10n.timeRangeDuration30m, duration: const Duration(minutes: 30)),
+    _DurationOption(label: l10n.timeRangeDuration1h, duration: const Duration(hours: 1)),
+    _DurationOption(label: l10n.timeRangeDuration2h, duration: const Duration(hours: 2)),
+  ];
+}
 
 const double _inlineTimeWheelHeight = 132;
 
@@ -32,7 +35,8 @@ TimeOfDay addDurationToTime(TimeOfDay start, Duration duration) {
 }
 
 Duration? matchingDurationOption(TimeOfDay start, TimeOfDay end) {
-  for (final _DurationOption option in _durationOptions) {
+  for (final _DurationOption option
+      in _durationOptions(AppLocalizationsBinding.instance)) {
     final TimeOfDay expectedEnd = addDurationToTime(start, option.duration);
     if (timeRangeMinutes(expectedEnd) == timeRangeMinutes(end)) {
       return option.duration;
@@ -42,17 +46,18 @@ Duration? matchingDurationOption(TimeOfDay start, TimeOfDay end) {
 }
 
 String timeRangeDurationLabel(TimeOfDay start, TimeOfDay end) {
+  final AppLocalizations l10n = AppLocalizationsBinding.instance;
   final int diff = timeRangeMinutes(end) - timeRangeMinutes(start);
   if (diff <= 0) {
-    return '结束时间需晚于开始时间';
+    return l10n.timeRangeInvalidShort;
   }
   if (diff % 60 == 0) {
-    return '共 ${diff ~/ 60} 小时';
+    return l10n.timeRangeTotalHours(diff ~/ 60);
   }
   if (diff < 60) {
-    return '共 $diff 分钟';
+    return l10n.timeRangeTotalMinutes(diff);
   }
-  return '共 ${diff ~/ 60} 小时 ${diff % 60} 分钟';
+  return l10n.timeRangeTotalHoursMinutes(diff ~/ 60, diff % 60);
 }
 
 class AppInlineTimeRangePicker extends StatefulWidget {
@@ -116,10 +121,12 @@ class _AppInlineTimeRangePickerState extends State<AppInlineTimeRangePicker> {
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final ColorScheme scheme = Theme.of(context).colorScheme;
     final bool isValid = timeRangeMinutes(widget.end) > timeRangeMinutes(widget.start);
     final TimeOfDay activeTime =
         _activeField == _ActiveTimeField.start ? widget.start : widget.end;
+    final List<_DurationOption> durationOptions = _durationOptions(l10n);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -135,14 +142,14 @@ class _AppInlineTimeRangePickerState extends State<AppInlineTimeRangePicker> {
           child: Row(
             children: <Widget>[
               _TimeFieldTab(
-                label: '开始',
+                label: l10n.timeRangeStart,
                 value: widget.start.format(context),
                 selected: _activeField == _ActiveTimeField.start,
                 onTap: () => setState(() => _activeField = _ActiveTimeField.start),
               ),
               const SizedBox(width: 6),
               _TimeFieldTab(
-                label: '结束',
+                label: l10n.timeRangeEnd,
                 value: widget.end.format(context),
                 selected: _activeField == _ActiveTimeField.end,
                 onTap: () => setState(() => _activeField = _ActiveTimeField.end),
@@ -174,7 +181,7 @@ class _AppInlineTimeRangePickerState extends State<AppInlineTimeRangePicker> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
               Text(
-                '快捷时长',
+                l10n.timeRangeQuickDuration,
                 style: TextStyle(
                   fontSize: 13,
                   color: scheme.onSurfaceVariant,
@@ -185,7 +192,7 @@ class _AppInlineTimeRangePickerState extends State<AppInlineTimeRangePicker> {
               Wrap(
                 spacing: 6,
                 runSpacing: 6,
-                children: _durationOptions.map((_DurationOption option) {
+                children: durationOptions.map((_DurationOption option) {
                   return _DurationChip(
                     label: option.label,
                     selected: _selectedDuration == option.duration,
@@ -197,7 +204,7 @@ class _AppInlineTimeRangePickerState extends State<AppInlineTimeRangePicker> {
               Text(
                 isValid
                     ? timeRangeDurationLabel(widget.start, widget.end)
-                    : '结束时间必须晚于开始时间',
+                    : l10n.reminderTimeRangeInvalid,
                 style: TextStyle(
                   fontSize: 13,
                   color: isValid ? scheme.onSurfaceVariant : scheme.error,

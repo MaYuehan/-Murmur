@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:murmur/core/theme/app_theme.dart';
 import 'package:murmur/core/utils/date_time_utils.dart';
 import 'package:murmur/core/utils/reminder_time_rules.dart';
+import 'package:murmur/l10n/app_localizations.dart';
 import 'package:murmur/models/reminder.dart';
 import 'package:murmur/providers/reminder_provider.dart';
 import 'package:murmur/services/voice_service.dart';
@@ -49,8 +50,9 @@ class _ReminderDetailPageState extends ConsumerState<ReminderDetailPage> {
   }
 
   String _voiceName(Reminder reminder) {
+    final AppLocalizations l10n = AppLocalizationsBinding.instance;
     if (reminder.isCustomVoice) {
-      return '我的录音';
+      return l10n.voiceMyRecording;
     }
     final String voiceId = _resolveVoiceId(reminder);
     for (final VoiceOption voice in VoiceService.presetVoices) {
@@ -58,7 +60,7 @@ class _ReminderDetailPageState extends ConsumerState<ReminderDetailPage> {
         return voice.name;
       }
     }
-    return '默认亲声';
+    return l10n.voiceDefaultPreset;
   }
 
   Future<void> _play(Reminder reminder) async {
@@ -93,21 +95,22 @@ class _ReminderDetailPageState extends ConsumerState<ReminderDetailPage> {
   }
 
   Future<void> _delete(Reminder reminder) async {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final bool? confirmed = await showDialog<bool>(
       context: context,
-      builder: (BuildContext context) {
+      builder: (BuildContext dialogContext) {
         return AlertDialog(
-          title: const Text('删除日程'),
-          content: Text('确定删除「${reminder.title}」吗？此操作无法撤销。'),
+          title: Text(l10n.calendarDeleteTitle),
+          content: Text(l10n.calendarDeleteMessage(reminder.title)),
           actions: <Widget>[
             TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('取消'),
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: Text(l10n.commonCancel),
             ),
             TextButton(
-              onPressed: () => Navigator.of(context).pop(true),
+              onPressed: () => Navigator.of(dialogContext).pop(true),
               style: TextButton.styleFrom(foregroundColor: Colors.red),
-              child: const Text('删除'),
+              child: Text(l10n.commonDelete),
             ),
           ],
         );
@@ -125,7 +128,7 @@ class _ReminderDetailPageState extends ConsumerState<ReminderDetailPage> {
 
   String _schedulePrimary(Reminder reminder) {
     if (reminder.scheduledTime == null) {
-      return '未安排时间';
+      return AppLocalizationsBinding.instance.reminderUnscheduled;
     }
     return DateTimeUtils.formatDate(reminder.scheduledTime!);
   }
@@ -135,7 +138,7 @@ class _ReminderDetailPageState extends ConsumerState<ReminderDetailPage> {
       return null;
     }
     if (reminder.isAllDay) {
-      return '全天';
+      return AppLocalizationsBinding.instance.reminderAllDay;
     }
     if (reminder.endTime != null) {
       return '${DateTimeUtils.formatTime(reminder.scheduledTime!)} – '
@@ -146,11 +149,11 @@ class _ReminderDetailPageState extends ConsumerState<ReminderDetailPage> {
 
   String _remindPrimary(Reminder reminder) {
     if (!reminder.remindEnabled) {
-      return '无';
+      return AppLocalizationsBinding.instance.reminderRemindNone;
     }
     final DateTime? when = reminder.remindAt ?? reminder.scheduledTime;
     if (when == null) {
-      return '未设置';
+      return AppLocalizationsBinding.instance.reminderRemindUnset;
     }
     return DateTimeUtils.formatDateTime(when);
   }
@@ -187,6 +190,7 @@ class _ReminderDetailPageState extends ConsumerState<ReminderDetailPage> {
     }
 
     final ColorScheme scheme = Theme.of(context).colorScheme;
+    final AppLocalizations l10n = AppLocalizations.of(context);
 
     return Scaffold(
       backgroundColor: AppTheme.groupedBackgroundColor,
@@ -196,7 +200,7 @@ class _ReminderDetailPageState extends ConsumerState<ReminderDetailPage> {
           TextButton(
             onPressed: () => _edit(reminder),
             child: Text(
-              '编辑',
+              l10n.commonEdit,
               style: TextStyle(
                 color: scheme.primary,
                 fontSize: 17,
@@ -232,18 +236,18 @@ class _ReminderDetailPageState extends ConsumerState<ReminderDetailPage> {
                         ? AppTheme.secondaryLabelColor
                         : scheme.primary),
                 title: reminder.isTodoDeadline
-                    ? '待办截止'
-                    : (reminder.linkedTodoId != null ? '待办' : '日期'),
+                    ? l10n.reminderDetailTodoDeadline
+                    : (reminder.linkedTodoId != null ? l10n.reminderDetailTodo : l10n.reminderFieldDate),
                 value: _schedulePrimary(reminder),
                 subtitle: reminder.isTodoDeadline || reminder.linkedTodoId != null
-                    ? (reminder.isCompleted ? '已在待办中完成' : '来自待办同步')
+                    ? (reminder.isCompleted ? l10n.reminderTodoCompletedInList : l10n.reminderFromTodoSync)
                     : _scheduleSecondary(reminder),
               ),
               if (reminder.notes?.trim().isNotEmpty == true)
                 AppDetailTile(
                   icon: Icons.notes_outlined,
                   iconColor: const Color(0xFF8E8E93),
-                  title: '备注',
+                  title: l10n.reminderFieldNotes,
                   value: reminder.notes!.trim(),
                   multiline: true,
                 ),
@@ -255,16 +259,16 @@ class _ReminderDetailPageState extends ConsumerState<ReminderDetailPage> {
               AppDetailTile(
                 icon: Icons.notifications_outlined,
                 iconColor: const Color(0xFFFF3B30),
-                title: '提醒',
+                title: l10n.reminderRemindSection,
                 value: _remindPrimary(reminder),
                 subtitle: _remindSecondary(reminder),
               ),
               AppDetailTile(
                 icon: Icons.graphic_eq_rounded,
                 iconColor: scheme.primary,
-                title: '亲声',
-                value: reminder.voiceRemindEnabled ? _voiceName(reminder) : '未开启',
-                subtitle: reminder.voiceRemindEnabled ? '到点播放亲声' : '仅文字通知',
+                title: l10n.reminderVoiceSection,
+                value: reminder.voiceRemindEnabled ? _voiceName(reminder) : l10n.reminderVoiceOff,
+                subtitle: reminder.voiceRemindEnabled ? l10n.reminderVoicePlayAtTime : l10n.reminderTextOnlyNotify,
                 showDivider: false,
               ),
             ],
@@ -276,7 +280,7 @@ class _ReminderDetailPageState extends ConsumerState<ReminderDetailPage> {
                 AppDetailTile(
                   icon: Icons.chat_bubble_outline,
                   iconColor: const Color(0xFF8E8E93),
-                  title: '提醒内容',
+                  title: l10n.reminderRemindContent,
                   value: _notificationText(reminder),
                   multiline: true,
                   showDivider: false,
@@ -301,13 +305,13 @@ class _ReminderDetailPageState extends ConsumerState<ReminderDetailPage> {
                 child: InkWell(
                   onTap: () => _delete(reminder),
                   borderRadius: BorderRadius.circular(14),
-                  child: const SizedBox(
+                  child: SizedBox(
                     width: double.infinity,
                     height: 52,
                     child: Center(
                       child: Text(
-                        '删除日程',
-                        style: TextStyle(
+                        l10n.reminderDeleteEvent,
+                        style: const TextStyle(
                           color: Color(0xFFFF3B30),
                           fontSize: 17,
                           fontWeight: FontWeight.w400,
@@ -340,6 +344,7 @@ class _VoicePlayerCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final ColorScheme scheme = Theme.of(context).colorScheme;
 
     return Container(
@@ -369,7 +374,7 @@ class _VoicePlayerCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 Text(
-                  isPlaying ? '正在播放' : '亲声预览',
+                  isPlaying ? l10n.reminderPlaying : l10n.reminderVoicePreview,
                   style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,

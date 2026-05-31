@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:murmur/core/theme/app_theme.dart';
 import 'package:murmur/core/utils/date_time_utils.dart';
+import 'package:murmur/l10n/app_localizations.dart';
 import 'package:murmur/models/reminder.dart';
 
 class ReminderCard extends StatelessWidget {
@@ -17,6 +18,7 @@ class ReminderCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final TextTheme textTheme = Theme.of(context).textTheme;
     final ColorScheme scheme = Theme.of(context).colorScheme;
     final DateTime? scheduledTime = reminder.scheduledTime;
@@ -25,7 +27,7 @@ class ReminderCard extends StatelessWidget {
         : scheme.primary.withValues(alpha: 0.85);
     final String timeLabel;
     if (reminder.isAllDay) {
-      timeLabel = '全天';
+      timeLabel = l10n.reminderAllDay;
     } else if (scheduledTime == null) {
       timeLabel = '--:--';
     } else if (reminder.endTime != null) {
@@ -115,7 +117,9 @@ class ReminderCard extends StatelessWidget {
                           ),
                           const SizedBox(width: 4),
                           Text(
-                            reminder.isCompleted ? '待办已完成' : '待办截止',
+                            reminder.isCompleted
+                                ? l10n.reminderTodoDone
+                                : l10n.reminderTodoDeadline,
                             style: textTheme.labelSmall?.copyWith(
                               color: reminder.isCompleted
                                   ? AppTheme.secondaryLabelColor
@@ -128,7 +132,7 @@ class ReminderCard extends StatelessWidget {
                     ] else if (reminder.linkedTodoId != null) ...<Widget>[
                       const SizedBox(height: 4),
                       Text(
-                        reminder.isCompleted ? '待办已完成' : '待办',
+                        reminder.isCompleted ? l10n.reminderTodoDone : l10n.reminderTodo,
                         style: textTheme.labelSmall?.copyWith(
                           color: AppTheme.secondaryLabelColor,
                           fontWeight: FontWeight.w600,
@@ -159,7 +163,7 @@ class ReminderCard extends StatelessWidget {
                           ),
                           const SizedBox(width: 4),
                           Text(
-                            '亲声提醒',
+                            l10n.reminderVoiceRemindBadge,
                             style: textTheme.labelSmall?.copyWith(
                               color: scheme.primary,
                               fontWeight: FontWeight.w600,

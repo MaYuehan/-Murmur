@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:murmur/core/utils/date_time_utils.dart';
+import 'package:murmur/l10n/app_localizations.dart';
 import 'package:murmur/widgets/inline_date_picker.dart';
 
 class AppInlineDateTimePicker extends StatelessWidget {
@@ -10,17 +11,18 @@ class AppInlineDateTimePicker extends StatelessWidget {
     required this.firstDate,
     required this.lastDate,
     required this.onChanged,
-    this.timeSectionLabel = '提醒时间',
+    this.timeSectionLabel,
   });
 
   final DateTime selectedDateTime;
   final DateTime firstDate;
   final DateTime lastDate;
   final ValueChanged<DateTime> onChanged;
-  final String timeSectionLabel;
+  final String? timeSectionLabel;
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final ColorScheme scheme = Theme.of(context).colorScheme;
     final DateTime date = DateTimeUtils.startOfDay(selectedDateTime);
     final TimeOfDay time = TimeOfDay.fromDateTime(selectedDateTime);
@@ -47,7 +49,7 @@ class AppInlineDateTimePicker extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.fromLTRB(56, 0, 14, 6),
           child: Text(
-            timeSectionLabel,
+            timeSectionLabel ?? l10n.reminderSectionLabelRemindTime,
             style: TextStyle(
               fontSize: 13,
               color: scheme.onSurfaceVariant,

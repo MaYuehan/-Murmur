@@ -1,4 +1,5 @@
 import 'package:intl/intl.dart';
+import 'package:murmur/l10n/app_localizations.dart';
 
 class DateTimeUtils {
   static final DateFormat _timeFormat = DateFormat('HH:mm');
@@ -27,45 +28,9 @@ class DateTimeUtils {
     );
   }
 
-  static String weekdayLabel(int weekday) {
-    switch (weekday) {
-      case DateTime.monday:
-        return '周一';
-      case DateTime.tuesday:
-        return '周二';
-      case DateTime.wednesday:
-        return '周三';
-      case DateTime.thursday:
-        return '周四';
-      case DateTime.friday:
-        return '周五';
-      case DateTime.saturday:
-        return '周六';
-      case DateTime.sunday:
-        return '周日';
-      default:
-        return '';
-    }
-  }
+  static String weekdayLabel(int weekday) =>
+      AppLocalizationsBinding.instance.weekdayLabel(weekday);
 
-  static String shortWeekdayLabel(int weekday) {
-    switch (weekday) {
-      case DateTime.monday:
-        return '一';
-      case DateTime.tuesday:
-        return '二';
-      case DateTime.wednesday:
-        return '三';
-      case DateTime.thursday:
-        return '四';
-      case DateTime.friday:
-        return '五';
-      case DateTime.saturday:
-        return '六';
-      case DateTime.sunday:
-        return '日';
-      default:
-        return '';
-    }
-  }
+  static String shortWeekdayLabel(int weekday) =>
+      AppLocalizationsBinding.instance.shortWeekdayLabel(weekday);
 }

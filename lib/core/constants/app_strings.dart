@@ -1,4 +1,8 @@
+import 'package:murmur/l10n/app_localizations.dart';
+
+@Deprecated('Use AppLocalizations or AppLocalizationsBinding instead')
 class AppStrings {
-  static const String appTitle = '亲声';
-  static const String comingSoon = 'Coming Soon';
+  static String get appTitle => AppLocalizationsBinding.instance.appTitle;
+
+  static String get comingSoon => AppLocalizationsBinding.instance.comingSoon;
 }

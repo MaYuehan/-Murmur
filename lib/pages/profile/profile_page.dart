@@ -1,17 +1,19 @@
 import 'package:flutter/material.dart';
-import 'package:murmur/core/constants/app_strings.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:murmur/core/theme/app_theme.dart';
 import 'package:murmur/core/utils/app_settings_storage.dart';
+import 'package:murmur/l10n/app_localizations.dart';
+import 'package:murmur/providers/locale_provider.dart';
 import 'package:murmur/widgets/app_ui.dart';
 
-class ProfilePage extends StatefulWidget {
+class ProfilePage extends ConsumerStatefulWidget {
   const ProfilePage({super.key});
 
   @override
-  State<ProfilePage> createState() => _ProfilePageState();
+  ConsumerState<ProfilePage> createState() => _ProfilePageState();
 }
 
-class _ProfilePageState extends State<ProfilePage> {
+class _ProfilePageState extends ConsumerState<ProfilePage> {
   bool _voiceRemindMuted = AppSettingsStorage.voiceRemindMuted;
 
   Future<void> _setVoiceRemindMuted(bool value) async {
@@ -24,8 +26,11 @@ class _ProfilePageState extends State<ProfilePage> {
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    final Locale locale = ref.watch(localeProvider);
+
     return Scaffold(
-      appBar: AppBar(title: const Text('我的')),
+      appBar: AppBar(title: Text(l10n.profilePageTitle)),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(
           AppTheme.pagePadding,
@@ -55,12 +60,12 @@ class _ProfilePageState extends State<ProfilePage> {
                     ),
                     const SizedBox(height: 14),
                     Text(
-                      AppStrings.appTitle,
+                      l10n.appTitle,
                       style: Theme.of(context).textTheme.titleLarge,
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      AppStrings.comingSoon,
+                      l10n.comingSoon,
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ],
@@ -69,7 +74,7 @@ class _ProfilePageState extends State<ProfilePage> {
             ],
           ),
           const SizedBox(height: 20),
-          const AppSectionHeader(title: '提醒'),
+          AppSectionHeader(title: l10n.profileSectionReminders),
           AppGroupedSection(
             children: <Widget>[
               SwitchListTile(
@@ -78,8 +83,8 @@ class _ProfilePageState extends State<ProfilePage> {
                   Icons.volume_off_outlined,
                   color: AppTheme.secondaryLabelColor,
                 ),
-                title: const Text('亲声静音'),
-                subtitle: const Text('开启后，到点只显示通知，不自动播放亲声'),
+                title: Text(l10n.profileVoiceMuteTitle),
+                subtitle: Text(l10n.profileVoiceMuteSubtitle),
                 value: _voiceRemindMuted,
                 activeThumbColor: AppTheme.primaryColor,
                 onChanged: _setVoiceRemindMuted,
@@ -87,24 +92,54 @@ class _ProfilePageState extends State<ProfilePage> {
             ],
           ),
           const SizedBox(height: 20),
-          const AppSectionHeader(title: '即将推出'),
+          AppSectionHeader(title: l10n.profileSectionLanguage),
           AppGroupedSection(
             children: <Widget>[
-              const AppListTile(
-                title: '习惯学习',
-                subtitle: '了解你的提醒偏好',
+              RadioListTile<Locale>(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                title: Text(l10n.profileLanguageChinese),
+                value: const Locale('zh'),
+                groupValue: locale,
+                activeColor: AppTheme.primaryColor,
+                onChanged: (Locale? value) {
+                  if (value != null) {
+                    ref.read(localeProvider.notifier).setLanguageCode('zh');
+                  }
+                },
+              ),
+              RadioListTile<Locale>(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                title: Text(l10n.profileLanguageEnglish),
+                value: const Locale('en'),
+                groupValue: locale,
+                activeColor: AppTheme.primaryColor,
+                onChanged: (Locale? value) {
+                  if (value != null) {
+                    ref.read(localeProvider.notifier).setLanguageCode('en');
+                  }
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          AppSectionHeader(title: l10n.profileSectionComingSoon),
+          AppGroupedSection(
+            children: <Widget>[
+              AppListTile(
+                title: l10n.profileHabitLearningTitle,
+                subtitle: l10n.profileHabitLearningSubtitle,
                 leadingIcon: Icons.auto_awesome_outlined,
                 leadingIconColor: AppTheme.primaryColor,
               ),
-              const AppListTile(
-                title: '亲声库管理',
-                subtitle: '统一管理录音与预设',
+              AppListTile(
+                title: l10n.profileVoiceLibraryTitle,
+                subtitle: l10n.profileVoiceLibrarySubtitle,
                 leadingIcon: Icons.library_music_outlined,
                 leadingIconColor: AppTheme.iosBlue,
               ),
-              const AppListTile(
-                title: '同步与备份',
-                subtitle: '跨设备保留你的亲声',
+              AppListTile(
+                title: l10n.profileSyncBackupTitle,
+                subtitle: l10n.profileSyncBackupSubtitle,
                 leadingIcon: Icons.cloud_outlined,
                 leadingIconColor: AppTheme.secondaryLabelColor,
                 showDivider: false,

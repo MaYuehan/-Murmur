@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:murmur/core/utils/reminder_time_rules.dart';
+import 'package:murmur/l10n/app_localizations.dart';
 import 'package:murmur/models/reminder.dart';
 import 'package:murmur/services/reminder_alarm_coordinator.dart';
 import 'package:timezone/data/latest.dart' as tz;
@@ -102,7 +103,7 @@ class NotificationService {
     if (reminder.notes?.trim().isNotEmpty == true) {
       return reminder.notes!.trim();
     }
-    return '亲声提醒你该做这件事了';
+    return AppLocalizationsBinding.instance.notificationDefaultBody;
   }
 
   static List<ReminderScheduleSlot> buildScheduleSlots(Reminder reminder) {

@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:murmur/core/theme/app_theme.dart';
 import 'package:murmur/core/utils/app_settings_storage.dart';
 import 'package:murmur/core/utils/notification_service.dart';
 import 'package:murmur/core/utils/reminder_storage.dart';
+import 'package:murmur/l10n/app_localizations.dart';
 import 'package:murmur/models/reminder.dart';
 import 'package:murmur/pages/calendar/calendar_page.dart';
 import 'package:murmur/pages/profile/profile_page.dart';
 import 'package:murmur/pages/todo/todo_page.dart';
 import 'package:murmur/pages/voice/voice_page.dart';
+import 'package:murmur/providers/locale_provider.dart';
 import 'package:murmur/providers/notification_navigation_provider.dart';
 import 'package:murmur/providers/reminder_provider.dart';
 import 'package:murmur/services/voice_remind_playback.dart';
@@ -21,6 +24,7 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await ReminderStorage.init();
   await AppSettingsStorage.init();
+  AppLocalizationsBinding.instance = AppLocalizations(AppSettingsStorage.appLocale);
 
   final List<Reminder> initialReminders = ReminderStorage.loadReminders();
   _bootstrapContainer = ProviderContainer(
@@ -61,14 +65,24 @@ Future<void> main() async {
   );
 }
 
-class MurmurApp extends StatelessWidget {
+class MurmurApp extends ConsumerWidget {
   const MurmurApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final Locale locale = ref.watch(localeProvider);
+
     return MaterialApp(
       navigatorKey: appNavigatorKey,
-      title: '亲声 Murmur',
+      title: AppLocalizations(locale).appWindowTitle,
+      locale: locale,
+      localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: AppLocalizations.supportedLocales,
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       home: const AppShell(),
@@ -116,6 +130,8 @@ class _AppShellState extends State<AppShell> {
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+
     return Scaffold(
       body: IndexedStack(
         index: _selectedIndex,
@@ -137,26 +153,26 @@ class _AppShellState extends State<AppShell> {
                 _selectedIndex = index;
               });
             },
-            destinations: const <NavigationDestination>[
+            destinations: <NavigationDestination>[
               NavigationDestination(
                 icon: Icon(Icons.calendar_month_outlined),
                 selectedIcon: Icon(Icons.calendar_month),
-                label: '日历',
+                label: l10n.navCalendar,
               ),
               NavigationDestination(
                 icon: Icon(Icons.checklist_outlined),
                 selectedIcon: Icon(Icons.checklist),
-                label: '待办',
+                label: l10n.navTodo,
               ),
               NavigationDestination(
                 icon: Icon(Icons.mic_none_outlined),
                 selectedIcon: Icon(Icons.mic),
-                label: '声音',
+                label: l10n.navVoice,
               ),
               NavigationDestination(
                 icon: Icon(Icons.person_outline),
                 selectedIcon: Icon(Icons.person),
-                label: '我的',
+                label: l10n.navProfile,
               ),
             ],
           ),

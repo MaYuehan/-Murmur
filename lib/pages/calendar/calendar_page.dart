@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:murmur/core/constants/app_strings.dart';
 import 'package:murmur/core/theme/app_theme.dart';
 import 'package:murmur/core/utils/date_time_utils.dart';
+import 'package:murmur/l10n/app_localizations.dart';
 import 'package:murmur/models/reminder.dart';
 import 'package:murmur/pages/calendar/reminder_detail_page.dart';
 import 'package:murmur/providers/notification_navigation_provider.dart';
@@ -61,23 +61,24 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
   }
 
   Future<void> _deleteReminder(Reminder reminder) async {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final bool? confirmed = await showDialog<bool>(
       context: context,
-      builder: (BuildContext context) {
+      builder: (BuildContext dialogContext) {
         return AlertDialog(
-          title: const Text('删除日程'),
-          content: Text('确定删除「${reminder.title}」吗？此操作无法撤销。'),
+          title: Text(l10n.calendarDeleteTitle),
+          content: Text(l10n.calendarDeleteMessage(reminder.title)),
           actions: <Widget>[
             TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('取消'),
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: Text(l10n.commonCancel),
             ),
             TextButton(
-              onPressed: () => Navigator.of(context).pop(true),
+              onPressed: () => Navigator.of(dialogContext).pop(true),
               style: TextButton.styleFrom(
                 foregroundColor: AppTheme.destructiveColor,
               ),
-              child: const Text('删除'),
+              child: Text(l10n.commonDelete),
             ),
           ],
         );
@@ -94,7 +95,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
       setState(() => _highlightedReminderId = null);
     }
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('已删除日程')),
+      SnackBar(content: Text(l10n.calendarDeletedSnack)),
     );
   }
 
@@ -162,13 +163,14 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
       _applyNotificationTargetIfNeeded();
     });
     final reminderNotifier = ref.read(reminderListProvider.notifier);
+    final AppLocalizations l10n = AppLocalizations.of(context);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text(AppStrings.appTitle),
+        title: Text(l10n.appTitle),
         actions: <Widget>[
           AppBarTextAction(
-            label: '新建',
+            label: l10n.commonCreate,
             onPressed: _openCreateReminderSheet,
           ),
         ],
@@ -180,9 +182,9 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
               AppSegmentedControl<_CalendarViewMode>(
-                options: const <AppSegmentOption<_CalendarViewMode>>[
-                  AppSegmentOption(value: _CalendarViewMode.month, label: '月'),
-                  AppSegmentOption(value: _CalendarViewMode.week, label: '周'),
+                options: <AppSegmentOption<_CalendarViewMode>>[
+                  AppSegmentOption(value: _CalendarViewMode.month, label: l10n.calendarViewMonth),
+                  AppSegmentOption(value: _CalendarViewMode.week, label: l10n.calendarViewWeek),
                 ],
                 selected: _viewMode,
                 onChanged: ( _CalendarViewMode mode) {
@@ -306,6 +308,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
   }
 
   Widget _buildWeekStrip(ReminderNotifier notifier) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final List<DateTime> weekDays = DateTimeUtils.daysInWeek(_selectedDay);
     final DateTime weekStart = weekDays.first;
     final DateTime weekEnd = weekDays.last;
@@ -322,7 +325,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
                   IconButton(
                     onPressed: () => _shiftWeek(-1),
                     icon: const Icon(Icons.chevron_left, color: AppTheme.primaryColor),
-                    tooltip: '上一周',
+                    tooltip: l10n.calendarPrevWeek,
                     visualDensity: VisualDensity.compact,
                   ),
                   Expanded(
@@ -337,7 +340,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
                   IconButton(
                     onPressed: () => _shiftWeek(1),
                     icon: const Icon(Icons.chevron_right, color: AppTheme.primaryColor),
-                    tooltip: '下一周',
+                    tooltip: l10n.calendarNextWeek,
                     visualDensity: VisualDensity.compact,
                   ),
                 ],
@@ -353,8 +356,8 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       foregroundColor: AppTheme.primaryColor,
                     ),
-                    child: const Text(
-                      '回到本周',
+                    child: Text(
+                      l10n.calendarBackToCurrentWeek,
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w500,
@@ -447,6 +450,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
   }
 
   Widget _buildDayAgenda(ReminderNotifier notifier) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final List<Reminder> reminders =
         notifier.getFixedRemindersByDay(_selectedDay);
 
@@ -455,10 +459,10 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
       children: <Widget>[
         AppSectionHeader(title: DateTimeUtils.formatDate(_selectedDay)),
         if (reminders.isEmpty)
-          const AppEmptyState(
+          AppEmptyState(
             icon: Icons.event_available_outlined,
-            title: '当天暂无日程',
-            subtitle: '点击右上角「新建」添加',
+            title: l10n.calendarEmptyDayTitle,
+            subtitle: l10n.calendarEmptyDaySubtitle,
           )
         else
           _buildReminderList(reminders),
@@ -467,8 +471,9 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
   }
 
   Widget _buildWeekAgenda(ReminderNotifier notifier) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final String agendaTitle = _weekAgendaScope == _WeekAgendaScope.week
-        ? '本周日程'
+        ? l10n.calendarWeekAgendaTitle
         : DateTimeUtils.formatDate(_selectedDay);
 
     return Column(
@@ -490,9 +495,9 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
                 width: 128,
                 child: AppSegmentedControl<_WeekAgendaScope>(
                   compact: true,
-                  options: const <AppSegmentOption<_WeekAgendaScope>>[
-                    AppSegmentOption(value: _WeekAgendaScope.week, label: '本周'),
-                    AppSegmentOption(value: _WeekAgendaScope.day, label: '当天'),
+                  options: <AppSegmentOption<_WeekAgendaScope>>[
+                    AppSegmentOption(value: _WeekAgendaScope.week, label: l10n.calendarScopeThisWeek),
+                    AppSegmentOption(value: _WeekAgendaScope.day, label: l10n.calendarScopeSelectedDay),
                   ],
                   selected: _weekAgendaScope,
                   onChanged: ( _WeekAgendaScope scope) {
@@ -512,14 +517,15 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
   }
 
   Widget _buildSelectedDayAgendaContent(ReminderNotifier notifier) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final List<Reminder> reminders =
         notifier.getFixedRemindersByDay(_selectedDay);
 
     if (reminders.isEmpty) {
       return AppEmptyState(
         icon: Icons.event_available_outlined,
-        title: '${DateTimeUtils.formatDate(_selectedDay)} 暂无日程',
-        subtitle: '点击右上角「新建」添加',
+        title: l10n.calendarEmptyDayNamedTitle(DateTimeUtils.formatDate(_selectedDay)),
+        subtitle: l10n.calendarEmptyDaySubtitle,
       );
     }
 
@@ -527,6 +533,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
   }
 
   Widget _buildWeekAgendaContent(ReminderNotifier notifier) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final List<DateTime> weekDays = DateTimeUtils.daysInWeek(_selectedDay);
 
     final List<Widget> sections = <Widget>[];
@@ -557,10 +564,10 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
     }
 
     if (sections.isEmpty) {
-      return const AppEmptyState(
+      return AppEmptyState(
         icon: Icons.date_range_outlined,
-        title: '本周暂无日程',
-        subtitle: '切换其他周或新建日程',
+        title: l10n.calendarEmptyWeekTitle,
+        subtitle: l10n.calendarEmptyWeekSubtitle,
       );
     }
 

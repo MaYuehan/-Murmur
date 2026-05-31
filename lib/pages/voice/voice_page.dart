@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:murmur/core/theme/app_theme.dart';
+import 'package:murmur/l10n/app_localizations.dart';
 import 'package:murmur/services/voice_service.dart';
 import 'package:murmur/widgets/app_ui.dart';
 
@@ -55,22 +56,23 @@ class _VoicePageState extends State<VoicePage> {
     });
   }
 
-  String _voiceSubtitle(VoiceOption voice, {required bool isDefault}) {
+  String _voiceSubtitle(AppLocalizations l10n, VoiceOption voice, {required bool isDefault}) {
     if (isDefault) {
-      return '默认亲声';
+      return l10n.voiceDefaultPreset;
     }
-    return '点击预览';
+    return l10n.voiceTapToPreview;
   }
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final ColorScheme scheme = Theme.of(context).colorScheme;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('声音'),
+        title: Text(l10n.voicePageTitle),
         actions: <Widget>[
-          AppBarTextAction(label: '刷新', onPressed: _loadRecordings),
+          AppBarTextAction(label: l10n.commonRefresh, onPressed: _loadRecordings),
         ],
       ),
       body: ListView(
@@ -100,10 +102,10 @@ class _VoicePageState extends State<VoicePage> {
                           child: Icon(Icons.volume_up_rounded, color: scheme.primary),
                         ),
                         const SizedBox(width: 14),
-                        const Expanded(
+                        Expanded(
                           child: Text(
-                            '正在播放...',
-                            style: TextStyle(
+                            l10n.voicePlaying,
+                            style: const TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w600,
                             ),
@@ -123,7 +125,7 @@ class _VoicePageState extends State<VoicePage> {
                 ],
               ),
             ),
-          const AppSectionHeader(title: '预设亲声'),
+          AppSectionHeader(title: l10n.voiceSectionPresets),
           AppGroupedSection(
             children: <Widget>[
               ...VoiceService.presetVoices.asMap().entries.map((MapEntry<int, VoiceOption> entry) {
@@ -134,7 +136,7 @@ class _VoicePageState extends State<VoicePage> {
 
                 return AppListTile(
                   title: voice.name,
-                  subtitle: _voiceSubtitle(voice, isDefault: isDefault),
+                  subtitle: _voiceSubtitle(l10n, voice, isDefault: isDefault),
                   leadingIcon: Icons.graphic_eq_rounded,
                   leadingIconColor: scheme.primary,
                   showDivider: !isLast,
@@ -174,17 +176,17 @@ class _VoicePageState extends State<VoicePage> {
             ],
           ),
           const SizedBox(height: 20),
-          AppSectionHeader(title: '我的录音'),
+          AppSectionHeader(title: l10n.voiceSectionRecordings),
           if (_recordings.isEmpty)
-            const AppGroupedSection(
+            AppGroupedSection(
               children: <Widget>[
                 Padding(
-                  padding: EdgeInsets.all(20),
+                  padding: const EdgeInsets.all(20),
                   child: Center(
                     child: Text(
-                      '还没有录音\n可在创建日程时录制',
+                      l10n.voiceEmptyRecordings,
                       textAlign: TextAlign.center,
-                      style: TextStyle(
+                      style: const TextStyle(
                         color: AppTheme.secondaryLabelColor,
                         fontSize: 15,
                         height: 1.4,
@@ -205,7 +207,7 @@ class _VoicePageState extends State<VoicePage> {
 
                   return AppListTile(
                     title: record.name,
-                    subtitle: isDefault ? '默认亲声' : '本地录音',
+                    subtitle: isDefault ? l10n.voiceDefaultPreset : l10n.voiceLocalRecording,
                     leadingIcon: Icons.mic_none_rounded,
                     leadingIconColor: AppTheme.iosBlue,
                     showDivider: !isLast,

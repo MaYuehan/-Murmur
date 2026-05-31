@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:murmur/core/theme/app_theme.dart';
 import 'package:murmur/core/utils/date_time_utils.dart';
 import 'package:murmur/core/utils/reminder_time_rules.dart';
+import 'package:murmur/l10n/app_localizations.dart';
 import 'package:murmur/models/reminder.dart';
 import 'package:murmur/providers/reminder_provider.dart';
 import 'package:murmur/services/voice_service.dart';
@@ -232,14 +233,12 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
       return false;
     }
     if (_remindEnabled) {
-      if (_usesCustomRemindPicker) {
-        if (_customRemindAt == null) {
-          return false;
-        }
-        if (ReminderTimeRules.usesRepeatDaySelection(_remindFrequency) &&
-            _remindRepeatDays.isEmpty) {
-          return false;
-        }
+      if (ReminderTimeRules.usesRepeatDaySelection(_remindFrequency) &&
+          _remindRepeatDays.isEmpty) {
+        return false;
+      }
+      if (_usesCustomRemindPicker && _customRemindAt == null) {
+        return false;
       }
       if (_computedRemindAt == null) {
         return false;
@@ -270,7 +269,7 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
     final String title = _titleController.text.trim();
     if (title.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请先填写待办内容')),
+        SnackBar(content: Text(AppLocalizations.of(context).todoSnackFillFirst)),
       );
       return;
     }
@@ -308,7 +307,7 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('录音权限不可用')),
+        SnackBar(content: Text(AppLocalizations.of(context).reminderSnackMicPermission)),
       );
     }
   }
@@ -325,15 +324,16 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
       return;
     }
     final double scrollOffset = _currentScrollOffset;
-    const List<AppPickerOption<String>> options = <AppPickerOption<String>>[
-      AppPickerOption(value: ReminderTimeRules.offsetAtTime, label: '准时'),
-      AppPickerOption(value: ReminderTimeRules.offsetBefore15m, label: '提前 15 分钟'),
-      AppPickerOption(value: ReminderTimeRules.offsetBefore1h, label: '提前 1 小时'),
-      AppPickerOption(value: ReminderTimeRules.offsetCustom, label: '自定义'),
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    final List<AppPickerOption<String>> options = <AppPickerOption<String>>[
+      AppPickerOption(value: ReminderTimeRules.offsetAtTime, label: l10n.remindOffsetOnTime),
+      AppPickerOption(value: ReminderTimeRules.offsetBefore15m, label: l10n.remindOffsetBefore15m),
+      AppPickerOption(value: ReminderTimeRules.offsetBefore1h, label: l10n.remindOffsetBefore1h),
+      AppPickerOption(value: ReminderTimeRules.offsetCustom, label: l10n.remindOffsetCustom),
     ];
     final String? picked = await showAppOptionPicker<String>(
       context: context,
-      title: '提醒时机',
+      title: l10n.reminderRemindOffset,
       options: options,
       current: _remindOffset,
     );
@@ -354,15 +354,16 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
 
   Future<void> _pickRemindFrequency() async {
     final double scrollOffset = _currentScrollOffset;
-    const List<AppPickerOption<String>> options = <AppPickerOption<String>>[
-      AppPickerOption(value: 'once', label: '不重复'),
-      AppPickerOption(value: 'daily', label: '每天'),
-      AppPickerOption(value: 'weekly', label: '每周'),
-      AppPickerOption(value: 'monthly', label: '每月'),
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    final List<AppPickerOption<String>> options = <AppPickerOption<String>>[
+      AppPickerOption(value: 'once', label: l10n.remindFrequencyOnce),
+      AppPickerOption(value: 'daily', label: l10n.remindFrequencyDaily),
+      AppPickerOption(value: 'weekly', label: l10n.remindFrequencyWeekly),
+      AppPickerOption(value: 'monthly', label: l10n.remindFrequencyMonthly),
     ];
     final String? picked = await showAppOptionPicker<String>(
       context: context,
-      title: '重复',
+      title: l10n.reminderRepeat,
       options: options,
       current: _remindFrequency,
     );
@@ -411,7 +412,7 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
     final String current = _presetVoiceValid ? _voiceSelection : VoiceService.defaultVoiceId;
     final String? picked = await showAppOptionPicker<String>(
       context: context,
-      title: '提醒声音',
+      title: AppLocalizations.of(context).reminderVoiceSound,
       options: options,
       current: current,
     );
@@ -428,7 +429,7 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
         return voice.name;
       }
     }
-    return '默认亲声';
+    return AppLocalizationsBinding.instance.voiceDefaultPreset;
   }
 
   void _selectVoiceRemindMode(_VoiceRemindMode mode) {
@@ -477,20 +478,21 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
   }
 
   Widget _buildVoiceModeSelector() {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
       child: Row(
         children: <Widget>[
           Expanded(
             child: _buildVoiceModeButton(
-              label: '文案亲声',
+              label: l10n.reminderVoiceModeText,
               mode: _VoiceRemindMode.textAndPreset,
             ),
           ),
           const SizedBox(width: 10),
           Expanded(
             child: _buildVoiceModeButton(
-              label: '录制亲声',
+              label: l10n.reminderVoiceModeRecord,
               mode: _VoiceRemindMode.record,
             ),
           ),
@@ -506,11 +508,12 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
       _usesCustomRemindPicker ? _remindFrequency : 'once';
 
   Widget _buildCustomRemindPicker() {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final DateTime base = _customRemindAt ?? _defaultCustomRemindAt();
     if (_customRemindFrequency == 'daily') {
       return AppInlineTimePicker(
         time: TimeOfDay.fromDateTime(base),
-        sectionLabel: '提醒时间',
+        sectionLabel: l10n.reminderSectionLabelRemindTime,
         onChanged: (TimeOfDay picked) {
           _setStatePreservingScroll(() {
             _customRemindAt = DateTime(
@@ -525,32 +528,20 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
       );
     }
     if (ReminderTimeRules.usesRepeatDaySelection(_customRemindFrequency)) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          AppInlineRepeatDaysPicker(
-            frequency: _customRemindFrequency,
-            selectedDays: _remindRepeatDays,
-            onChanged: (List<int> days) {
-              _setStatePreservingScroll(() => _remindRepeatDays = days);
-            },
-          ),
-          AppInlineTimePicker(
-            time: TimeOfDay.fromDateTime(base),
-            sectionLabel: '提醒时间',
-            onChanged: (TimeOfDay picked) {
-              _setStatePreservingScroll(() {
-                _customRemindAt = DateTime(
-                  base.year,
-                  base.month,
-                  base.day,
-                  picked.hour,
-                  picked.minute,
-                );
-              });
-            },
-          ),
-        ],
+      return AppInlineTimePicker(
+        time: TimeOfDay.fromDateTime(base),
+        sectionLabel: l10n.reminderSectionLabelRemindTime,
+        onChanged: (TimeOfDay picked) {
+          _setStatePreservingScroll(() {
+            _customRemindAt = DateTime(
+              base.year,
+              base.month,
+              base.day,
+              picked.hour,
+              picked.minute,
+            );
+          });
+        },
       );
     }
 
@@ -607,7 +598,7 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
     if (_titleController.text.trim().isEmpty) {
       _formKey.currentState?.validate();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请填写待办内容')),
+        SnackBar(content: Text(AppLocalizations.of(context).todoValidationContent)),
       );
       return;
     }
@@ -687,6 +678,7 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final DateTime? remindPreview = _computedRemindAt;
     final ColorScheme scheme = Theme.of(context).colorScheme;
 
@@ -701,11 +693,11 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
               children: <Widget>[
                 TextButton(
                   onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('取消'),
+                  child: Text(l10n.commonCancel),
                 ),
                 Expanded(
                   child: Text(
-                    _isEditing ? '编辑待办' : '创建待办',
+                    _isEditing ? l10n.todoSheetEdit : l10n.todoSheetCreate,
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
@@ -713,7 +705,7 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
                 TextButton(
                   onPressed: _canSave ? _save : null,
                   child: Text(
-                    _isEditing ? '保存' : '添加',
+                    _isEditing ? l10n.commonSave : l10n.todoAdd,
                     style: TextStyle(
                       color: _canSave ? scheme.primary : scheme.onSurfaceVariant,
                       fontWeight: FontWeight.w600,
@@ -737,14 +729,14 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
                       AppDetailTextField(
                         icon: Icons.checklist_outlined,
                         iconColor: scheme.primary,
-                        label: '内容',
+                        label: l10n.reminderFieldContent,
                         controller: _titleController,
-                        hintText: '添加待办事项…',
+                        hintText: l10n.todoHintContent,
                         showDivider: false,
                         textInputAction: TextInputAction.next,
                         validator: (String? value) {
                           if ((value ?? '').trim().isEmpty) {
-                            return '请填写待办内容';
+                            return l10n.todoValidationContent;
                           }
                           return null;
                         },
@@ -753,8 +745,8 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
                     ],
                   ),
                   const SizedBox(height: 12),
-                  const AppSectionHeader(
-                    title: '截止',
+                  AppSectionHeader(
+                    title: l10n.todoSectionDeadline,
                     style: AppSectionHeaderStyle.caption,
                   ),
                   AppDetailSection(
@@ -762,7 +754,7 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
                       AppDetailSwitchTile(
                         icon: Icons.flag_outlined,
                         iconColor: AppTheme.deadlineColor,
-                        title: '截止日期',
+                        title: l10n.todoDeadlineDate,
                         value: _hasDeadline,
                         showDivider: _hasDeadline,
                         onChanged: (bool value) {
@@ -789,11 +781,11 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
                         AppDetailTile(
                           icon: Icons.event_outlined,
                           iconColor: AppTheme.deadlineColor,
-                          title: '截止日期',
+                          title: l10n.todoDeadlineDate,
                           value: inlineDatePickerSummary(_deadlineDate),
                           subtitle: _hasDeadlineSpecificTime
                               ? null
-                              : '当天 23:59',
+                              : l10n.todoDeadlineEndOfDay,
                           onTap: () => _toggleExpandedField(_ExpandedField.deadlineDate),
                           expanded: _expandedField == _ExpandedField.deadlineDate,
                           showDivider: _expandedField != _ExpandedField.deadlineDate,
@@ -812,8 +804,8 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
                         AppDetailSwitchTile(
                           icon: Icons.access_time,
                           iconColor: AppTheme.iosBlue,
-                          title: '具体时间',
-                          subtitle: _hasDeadlineSpecificTime ? null : '未开启时默认为当天 23:59',
+                          title: l10n.todoSpecificTime,
+                          subtitle: _hasDeadlineSpecificTime ? null : l10n.todoSpecificTimeOffSubtitle,
                           value: _hasDeadlineSpecificTime,
                           showDivider: _hasDeadlineSpecificTime,
                           onChanged: (bool value) {
@@ -832,7 +824,7 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
                           AppDetailTile(
                             icon: Icons.schedule_outlined,
                             iconColor: AppTheme.iosBlue,
-                            title: '时间',
+                            title: l10n.todoFieldTime,
                             value: _deadlineTime.format(context),
                             onTap: () => _toggleExpandedField(_ExpandedField.deadlineTime),
                             expanded: _expandedField == _ExpandedField.deadlineTime,
@@ -844,8 +836,8 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
                         AppDetailSwitchTile(
                           icon: Icons.calendar_today_outlined,
                           iconColor: scheme.primary,
-                          title: '同步到日历',
-                          subtitle: '在日历中以红色截止事项显示',
+                          title: l10n.todoSyncToCalendar,
+                          subtitle: l10n.todoSyncToCalendarSubtitle,
                           value: _syncToCalendar,
                           showDivider: false,
                           onChanged: (bool value) {
@@ -856,8 +848,8 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
                     ],
                   ),
                   const SizedBox(height: 12),
-                  const AppSectionHeader(
-                    title: '提醒',
+                  AppSectionHeader(
+                    title: l10n.reminderSectionRemind,
                     style: AppSectionHeaderStyle.caption,
                   ),
                   AppDetailSection(
@@ -865,8 +857,8 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
                       AppDetailSwitchTile(
                         icon: Icons.notifications_outlined,
                         iconColor: AppTheme.destructiveColor,
-                        title: '需要提醒',
-                        subtitle: '提醒时间可以与截止时间不同',
+                        title: l10n.reminderNeedRemind,
+                        subtitle: l10n.todoNeedRemindSubtitle,
                         value: _remindEnabled,
                         showDivider: _remindEnabled,
                         onChanged: (bool value) {
@@ -885,7 +877,7 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
                           AppDetailTile(
                             icon: Icons.schedule_outlined,
                             iconColor: AppTheme.iosBlue,
-                            title: '提醒时机',
+                            title: l10n.reminderRemindOffset,
                             value: ReminderTimeRules.offsetLabel(_remindOffset),
                             onTap: _pickRemindOffset,
                           ),
@@ -893,7 +885,7 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
                           AppDetailTile(
                             icon: Icons.notifications_active_outlined,
                             iconColor: AppTheme.destructiveColor,
-                            title: _hasDeadline ? '自定义时间' : '提醒时间',
+                            title: _hasDeadline ? l10n.reminderCustomTime : l10n.todoRemindTime,
                             value: ReminderTimeRules.customRemindTileValue(
                               remindAt: _customRemindAt,
                               frequency: _customRemindFrequency,
@@ -910,7 +902,7 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
                         AppDetailTile(
                           icon: Icons.repeat,
                           iconColor: AppTheme.secondaryLabelColor,
-                          title: '重复',
+                          title: l10n.reminderRepeat,
                           value: ReminderTimeRules.frequencyLabel(_remindFrequency),
                           subtitle: remindPreview != null
                               ? ReminderTimeRules.remindPreviewLabel(
@@ -920,15 +912,25 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
                                 )
                               : null,
                           onTap: _pickRemindFrequency,
-                          showDivider: false,
+                          expanded: ReminderTimeRules.usesRepeatDaySelection(_remindFrequency),
+                          showDivider:
+                              !ReminderTimeRules.usesRepeatDaySelection(_remindFrequency),
                         ),
+                        if (ReminderTimeRules.usesRepeatDaySelection(_remindFrequency))
+                          AppInlineRepeatDaysPicker(
+                            frequency: _remindFrequency,
+                            selectedDays: _remindRepeatDays,
+                            onChanged: (List<int> days) {
+                              _setStatePreservingScroll(() => _remindRepeatDays = days);
+                            },
+                          ),
                       ],
                     ],
                   ),
                   if (_remindEnabled) ...<Widget>[
                     const SizedBox(height: 12),
-                    const AppSectionHeader(
-                      title: '亲声提醒',
+                    AppSectionHeader(
+                      title: l10n.reminderSectionVoice,
                       style: AppSectionHeaderStyle.caption,
                     ),
                     AppDetailSection(
@@ -936,8 +938,8 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
                         AppDetailSwitchTile(
                           icon: Icons.graphic_eq_rounded,
                           iconColor: scheme.primary,
-                          title: '语音提醒',
-                          subtitle: '文案亲声或录制亲声',
+                          title: l10n.reminderVoiceRemind,
+                          subtitle: l10n.reminderVoiceRemindSubtitle,
                           value: _voiceRemindEnabled,
                           showDivider: _voiceRemindEnabled,
                           onChanged: (bool value) {
@@ -956,24 +958,24 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
                             AppDetailTextField(
                               icon: Icons.chat_bubble_outline,
                               iconColor: AppTheme.secondaryLabelColor,
-                              label: '提醒文案',
+                              label: l10n.reminderRemindText,
                               controller: _remindTextController,
-                              hintText: '亲声播报时朗读',
+                              hintText: l10n.reminderRemindTextHint,
                               onChanged: (_) => setState(() {}),
                             ),
                             AppDetailActionTile(
                               icon: Icons.content_copy_outlined,
-                              label: '与待办内容相同',
+                              label: l10n.todoSameAsContent,
                               compact: true,
                               onTap: _copyRemindTextFromTitle,
                             ),
                             AppDetailTile(
                               icon: Icons.record_voice_over_outlined,
                               iconColor: scheme.primary,
-                              title: '提醒声音',
+                              title: l10n.reminderVoiceSound,
                               value: _presetVoiceValid
                                   ? _presetVoiceLabel(_voiceSelection)
-                                  : '请选择',
+                                  : l10n.commonPleaseSelect,
                               placeholder: !_presetVoiceValid,
                               onTap: _pickPresetVoice,
                               showDivider: false,
@@ -988,7 +990,7 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
                                     child: FilledButton.icon(
                                       onPressed: _toggleRecording,
                                       icon: Icon(_isRecording ? Icons.stop : Icons.mic),
-                                      label: Text(_isRecording ? '停止录音' : '开始录音'),
+                                      label: Text(_isRecording ? l10n.reminderRecordStop : l10n.reminderRecordStart),
                                     ),
                                   ),
                                   if (_recordingPath != null &&
@@ -999,7 +1001,7 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
                                       child: OutlinedButton.icon(
                                         onPressed: _previewRecording,
                                         icon: const Icon(Icons.play_arrow_rounded),
-                                        label: const Text('试听录音'),
+                                        label: Text(l10n.reminderPreviewRecording),
                                       ),
                                     ),
                                   ],
@@ -1015,7 +1017,7 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
                     width: double.infinity,
                     child: FilledButton(
                       onPressed: _canSave ? _save : null,
-                      child: Text(_isEditing ? '保存修改' : '添加'),
+                      child: Text(_isEditing ? l10n.reminderSaveChanges : l10n.todoAdd),
                     ),
                   ),
                 ],

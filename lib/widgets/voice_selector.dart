@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:murmur/services/voice_service.dart';
+import 'package:murmur/l10n/app_localizations.dart';
 
 class SelectedVoice {
   const SelectedVoice({
@@ -110,8 +111,9 @@ class _VoiceSelectorState extends State<VoiceSelector> {
       if (!mounted) {
         return;
       }
+      final AppLocalizations l10n = AppLocalizations.of(context);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('录音权限不可用')),
+        SnackBar(content: Text(l10n.reminderSnackMicPermission)),
       );
     }
   }
@@ -146,13 +148,14 @@ class _VoiceSelectorState extends State<VoiceSelector> {
   }
 
   SelectedVoice _currentSelected() {
+    final AppLocalizations l10n = AppLocalizationsBinding.instance;
     if (_selectedId == 'my_recorded_voice' && _recordingPath != null) {
       return SelectedVoice(
         soundId: 'my_recorded_voice',
         voiceId: 'my_recorded_voice',
         voicePath: _recordingPath,
         isCustomVoice: true,
-        label: 'My Recorded Voice',
+        label: l10n.voiceMyRecordedVoice,
       );
     }
 
@@ -169,12 +172,14 @@ class _VoiceSelectorState extends State<VoiceSelector> {
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        const Text(
-          'Voice Selection',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+        Text(
+          l10n.voiceSelectorTitle,
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 8),
         DropdownButtonFormField<String>(
@@ -186,9 +191,9 @@ class _VoiceSelectorState extends State<VoiceSelector> {
                 child: Text(voice.name),
               ),
             ),
-            const DropdownMenuItem<String>(
+            DropdownMenuItem<String>(
               value: 'my_recorded_voice',
-              child: Text('My Recorded Voice'),
+              child: Text(l10n.voiceMyRecordedVoice),
             ),
           ],
           onChanged: (String? value) {
@@ -207,13 +212,13 @@ class _VoiceSelectorState extends State<VoiceSelector> {
             OutlinedButton.icon(
               onPressed: _toggleRecord,
               icon: Icon(_isRecording ? Icons.stop : Icons.mic),
-              label: Text(_isRecording ? '停止录音' : '录音（最多30秒）'),
+              label: Text(_isRecording ? l10n.reminderRecordStop : l10n.voiceRecordMax30s),
             ),
             const SizedBox(width: 8),
             OutlinedButton.icon(
               onPressed: _preview,
               icon: Icon(_isPlaying ? Icons.stop : Icons.play_arrow),
-              label: Text(_isPlaying ? 'Stop' : 'Preview'),
+              label: Text(_isPlaying ? l10n.voiceStop : l10n.voicePreviewButton),
             ),
           ],
         ),
@@ -221,7 +226,7 @@ class _VoiceSelectorState extends State<VoiceSelector> {
           Padding(
             padding: const EdgeInsets.only(top: 6),
             child: Text(
-              'Recording...',
+              l10n.voiceRecordingShort,
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ),
@@ -229,7 +234,7 @@ class _VoiceSelectorState extends State<VoiceSelector> {
           Padding(
             padding: const EdgeInsets.only(top: 6),
             child: Text(
-              'My recordings: ${_recordings.length}',
+              l10n.voiceMyRecordingsCount(_recordings.length),
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ),

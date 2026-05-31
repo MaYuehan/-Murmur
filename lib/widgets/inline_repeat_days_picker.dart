@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:murmur/core/theme/app_theme.dart';
 import 'package:murmur/core/utils/date_time_utils.dart';
+import 'package:murmur/l10n/app_localizations.dart';
 
 class AppInlineRepeatDaysPicker extends StatelessWidget {
   const AppInlineRepeatDaysPicker({
@@ -29,6 +30,7 @@ class AppInlineRepeatDaysPicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final ColorScheme scheme = Theme.of(context).colorScheme;
 
     return Column(
@@ -43,7 +45,7 @@ class AppInlineRepeatDaysPicker extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.fromLTRB(56, 10, 14, 8),
           child: Text(
-            _isWeekly ? '每周' : '每月',
+            _isWeekly ? l10n.remindFrequencyWeekly : l10n.remindFrequencyMonthly,
             style: TextStyle(
               fontSize: 13,
               color: scheme.onSurfaceVariant,

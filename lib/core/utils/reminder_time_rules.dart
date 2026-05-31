@@ -1,4 +1,5 @@
 import 'package:murmur/core/utils/date_time_utils.dart';
+import 'package:murmur/l10n/app_localizations.dart';
 
 class ReminderTimeRules {
   static const String offsetAtTime = 'at_time';
@@ -73,30 +74,32 @@ class ReminderTimeRules {
   }
 
   static String offsetLabel(String offset) {
+    final AppLocalizations l10n = AppLocalizationsBinding.instance;
     switch (offset) {
       case offsetBefore15m:
-        return '提前 15 分钟';
+        return l10n.remindOffsetBefore15m;
       case offsetBefore1h:
-        return '提前 1 小时';
+        return l10n.remindOffsetBefore1h;
       case offsetCustom:
-        return '自定义';
+        return l10n.remindOffsetCustom;
       case offsetAtTime:
       default:
-        return '准时';
+        return l10n.remindOffsetOnTime;
     }
   }
 
   static String frequencyLabel(String frequency) {
+    final AppLocalizations l10n = AppLocalizationsBinding.instance;
     switch (frequency) {
       case 'daily':
-        return '每天';
+        return l10n.remindFrequencyDaily;
       case 'weekly':
-        return '每周';
+        return l10n.remindFrequencyWeekly;
       case 'monthly':
-        return '每月';
+        return l10n.remindFrequencyMonthly;
       case 'once':
       default:
-        return '不重复';
+        return l10n.remindFrequencyOnce;
     }
   }
 
@@ -146,10 +149,12 @@ class ReminderTimeRules {
       remindAt: remindAt,
     );
     if (days.isEmpty) {
-      return '请选择';
+      return AppLocalizationsBinding.instance.commonPleaseSelect;
     }
     if (frequency == 'weekly') {
-      return days.map(DateTimeUtils.weekdayLabel).join('、');
+      final String separator =
+          AppLocalizationsBinding.instance.isZh ? '、' : ', ';
+      return days.map(DateTimeUtils.weekdayLabel).join(separator);
     }
     if (frequency == 'monthly') {
       return days.map((int day) => '$day').join('、');
@@ -165,10 +170,11 @@ class ReminderTimeRules {
     if (remindAt == null) {
       return '';
     }
+    final AppLocalizations l10n = AppLocalizationsBinding.instance;
     final String time = DateTimeUtils.formatTime(remindAt);
     switch (frequency) {
       case 'daily':
-        return '每天 $time 提醒';
+        return l10n.remindPreviewDaily(time);
       case 'weekly':
         final List<int> days = effectiveRepeatDays(
           frequency: frequency,
@@ -176,9 +182,13 @@ class ReminderTimeRules {
           remindAt: remindAt,
         );
         if (days.isEmpty) {
-          return '请选择每周提醒日';
+          return l10n.remindPreviewWeeklyNeedDays;
         }
-        return '每周${days.map(DateTimeUtils.weekdayLabel).join('、')} $time 提醒';
+        final String separator = l10n.isZh ? '、' : ', ';
+        return l10n.remindPreviewWeekly(
+          days.map(DateTimeUtils.weekdayLabel).join(separator),
+          time,
+        );
       case 'monthly':
         final List<int> days = effectiveRepeatDays(
           frequency: frequency,
@@ -186,12 +196,13 @@ class ReminderTimeRules {
           remindAt: remindAt,
         );
         if (days.isEmpty) {
-          return '请选择每月提醒日';
+          return l10n.remindPreviewMonthlyNeedDays;
         }
-        return '每月${days.join('、')}日 $time 提醒';
+        final String separator = l10n.isZh ? '、' : ', ';
+        return l10n.remindPreviewMonthly(days.join(separator), time);
       case 'once':
       default:
-        return '将在 ${DateTimeUtils.formatDateTime(remindAt)} 通知';
+        return l10n.remindPreviewOnce(DateTimeUtils.formatDateTime(remindAt));
     }
   }
 
@@ -201,7 +212,7 @@ class ReminderTimeRules {
     List<int> repeatDays = const <int>[],
   }) {
     if (remindAt == null) {
-      return '请选择';
+      return AppLocalizationsBinding.instance.commonPleaseSelect;
     }
     if (frequency == 'once') {
       return DateTimeUtils.formatDateTime(remindAt);

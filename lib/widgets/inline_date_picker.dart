@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:murmur/core/theme/app_theme.dart';
 import 'package:murmur/core/utils/date_time_utils.dart';
+import 'package:murmur/l10n/app_localizations.dart';
 import 'package:murmur/widgets/app_calendar_styles.dart';
 import 'package:murmur/widgets/app_ui.dart';
 
@@ -63,6 +64,7 @@ class _AppInlineDatePickerState extends State<AppInlineDatePicker> {
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final ColorScheme scheme = Theme.of(context).colorScheme;
     final DateTime selectedDay = DateTimeUtils.startOfDay(widget.selectedDate);
 
@@ -93,9 +95,15 @@ class _AppInlineDatePickerState extends State<AppInlineDatePicker> {
                     alignment: Alignment.center,
                     child: AppSegmentedControl<bool>(
                       compact: true,
-                      options: const <AppSegmentOption<bool>>[
-                        AppSegmentOption(value: false, label: '日历'),
-                        AppSegmentOption(value: true, label: '滚轮'),
+                      options: <AppSegmentOption<bool>>[
+                        AppSegmentOption(
+                          value: false,
+                          label: l10n.datePickerModeCalendar,
+                        ),
+                        AppSegmentOption(
+                          value: true,
+                          label: l10n.datePickerModeWheel,
+                        ),
                       ],
                       selected: _wheelMode,
                       onChanged: (bool value) => setState(() => _wheelMode = value),
