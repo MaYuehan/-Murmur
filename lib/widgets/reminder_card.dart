@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:murmur/core/theme/app_theme.dart';
 import 'package:murmur/core/utils/date_time_utils.dart';
 import 'package:murmur/models/reminder.dart';
 
@@ -7,15 +8,21 @@ class ReminderCard extends StatelessWidget {
     super.key,
     required this.reminder,
     this.isHighlighted = false,
+    this.onTap,
   });
 
   final Reminder reminder;
   final bool isHighlighted;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final TextTheme textTheme = Theme.of(context).textTheme;
+    final ColorScheme scheme = Theme.of(context).colorScheme;
     final DateTime? scheduledTime = reminder.scheduledTime;
+    final Color accentColor = reminder.isTodoDeadline
+        ? AppTheme.deadlineColor
+        : scheme.primary.withValues(alpha: 0.85);
     final String timeLabel;
     if (reminder.isAllDay) {
       timeLabel = '全天';
@@ -28,45 +35,153 @@ class ReminderCard extends StatelessWidget {
       timeLabel = DateTimeUtils.formatTime(scheduledTime);
     }
 
-    return Card(
-      margin: EdgeInsets.zero,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: isHighlighted
-            ? BorderSide(
-                color: Theme.of(context).colorScheme.primary,
-                width: 1.6,
-              )
-            : BorderSide.none,
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            SizedBox(
-              width: 58,
-              child: Text(
-                timeLabel,
-                style: textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.2,
+    return Material(
+      color: AppTheme.cardColor,
+      borderRadius: BorderRadius.circular(AppTheme.groupedRadius),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          decoration: BoxDecoration(
+            border: isHighlighted
+                ? Border.all(color: scheme.primary, width: 1.5)
+                : null,
+            borderRadius: BorderRadius.circular(AppTheme.groupedRadius),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Container(
+                width: 54,
+                padding: const EdgeInsets.only(top: 2),
+                child: Text(
+                  timeLabel,
+                  style: textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: reminder.isCompleted
+                        ? AppTheme.secondaryLabelColor
+                        : (reminder.isAllDay && !reminder.isTodoDeadline
+                            ? scheme.primary
+                            : (reminder.isTodoDeadline
+                                ? AppTheme.deadlineColor
+                                : AppTheme.textPrimaryColor)),
+                    decoration: reminder.isCompleted
+                        ? TextDecoration.lineThrough
+                        : TextDecoration.none,
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text(
-                    reminder.title,
-                    style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
-                  ),
-                ],
+              Container(
+                width: 3,
+                height: 42,
+                margin: const EdgeInsets.only(right: 12, top: 2),
+                decoration: BoxDecoration(
+                  color: reminder.isCompleted
+                      ? AppTheme.secondaryLabelColor.withValues(alpha: 0.5)
+                      : accentColor,
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
-            ),
-          ],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      reminder.title,
+                      style: textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        height: 1.3,
+                        color: reminder.isCompleted
+                            ? AppTheme.secondaryLabelColor
+                            : AppTheme.textPrimaryColor,
+                        decoration: reminder.isCompleted
+                            ? TextDecoration.lineThrough
+                            : TextDecoration.none,
+                      ),
+                    ),
+                    if (reminder.isTodoDeadline) ...<Widget>[
+                      const SizedBox(height: 4),
+                      Row(
+                        children: <Widget>[
+                          Icon(
+                            reminder.isCompleted
+                                ? Icons.check_circle_outline
+                                : Icons.flag_outlined,
+                            size: 13,
+                            color: reminder.isCompleted
+                                ? AppTheme.secondaryLabelColor
+                                : AppTheme.deadlineColor,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            reminder.isCompleted ? '待办已完成' : '待办截止',
+                            style: textTheme.labelSmall?.copyWith(
+                              color: reminder.isCompleted
+                                  ? AppTheme.secondaryLabelColor
+                                  : AppTheme.deadlineColor,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ] else if (reminder.linkedTodoId != null) ...<Widget>[
+                      const SizedBox(height: 4),
+                      Text(
+                        reminder.isCompleted ? '待办已完成' : '待办',
+                        style: textTheme.labelSmall?.copyWith(
+                          color: AppTheme.secondaryLabelColor,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                    if (reminder.notes?.trim().isNotEmpty == true) ...<Widget>[
+                      const SizedBox(height: 4),
+                      Text(
+                        reminder.notes!.trim(),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: textTheme.bodySmall?.copyWith(
+                          color: reminder.isCompleted
+                              ? AppTheme.secondaryLabelColor
+                              : null,
+                        ),
+                      ),
+                    ],
+                    if (reminder.remindEnabled && reminder.voiceRemindEnabled) ...<Widget>[
+                      const SizedBox(height: 6),
+                      Row(
+                        children: <Widget>[
+                          Icon(
+                            Icons.graphic_eq_rounded,
+                            size: 14,
+                            color: scheme.primary,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '亲声提醒',
+                            style: textTheme.labelSmall?.copyWith(
+                              color: scheme.primary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              if (reminder.isCompleted)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Icon(
+                    Icons.check_circle,
+                    size: 20,
+                    color: AppTheme.secondaryLabelColor,
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );

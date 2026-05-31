@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:murmur/core/theme/app_theme.dart';
+import 'package:murmur/core/utils/app_settings_storage.dart';
 import 'package:murmur/core/utils/notification_service.dart';
 import 'package:murmur/core/utils/reminder_storage.dart';
 import 'package:murmur/models/reminder.dart';
@@ -10,6 +11,7 @@ import 'package:murmur/pages/todo/todo_page.dart';
 import 'package:murmur/pages/voice/voice_page.dart';
 import 'package:murmur/providers/notification_navigation_provider.dart';
 import 'package:murmur/providers/reminder_provider.dart';
+import 'package:murmur/services/voice_remind_playback.dart';
 
 final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
 late final ProviderContainer _bootstrapContainer;
@@ -18,6 +20,7 @@ final ValueNotifier<int> appTabIndexNotifier = ValueNotifier<int>(0);
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await ReminderStorage.init();
+  await AppSettingsStorage.init();
 
   final List<Reminder> initialReminders = ReminderStorage.loadReminders();
   _bootstrapContainer = ProviderContainer(
@@ -37,6 +40,7 @@ Future<void> main() async {
       if (reminder == null) {
         return;
       }
+      await VoiceRemindPlayback.playForReminder(reminder);
       _bootstrapContainer
           .read(notificationNavigationTargetProvider.notifier)
           .state = NotificationNavigationTarget(reminderId: payload);
@@ -113,44 +117,50 @@ class _AppShellState extends State<AppShell> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 180),
-        switchInCurve: Curves.easeOut,
-        switchOutCurve: Curves.easeIn,
-        child: KeyedSubtree(
-          key: ValueKey<int>(_selectedIndex),
-          child: _pages[_selectedIndex],
-        ),
+      body: IndexedStack(
+        index: _selectedIndex,
+        children: _pages,
       ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _selectedIndex,
-        onDestinationSelected: (int index) {
-          setState(() {
-            _selectedIndex = index;
-          });
-        },
-        destinations: const <NavigationDestination>[
-          NavigationDestination(
-            icon: Icon(Icons.calendar_month_outlined),
-            selectedIcon: Icon(Icons.calendar_month),
-            label: '日历',
+      bottomNavigationBar: DecoratedBox(
+        decoration: BoxDecoration(
+          color: AppTheme.cardColor,
+          border: Border(
+            top: BorderSide(color: Colors.black.withValues(alpha: 0.06)),
           ),
-          NavigationDestination(
-            icon: Icon(Icons.checklist_outlined),
-            selectedIcon: Icon(Icons.checklist),
-            label: '待办',
+        ),
+        child: SafeArea(
+          top: false,
+          child: NavigationBar(
+            selectedIndex: _selectedIndex,
+            onDestinationSelected: (int index) {
+              setState(() {
+                _selectedIndex = index;
+              });
+            },
+            destinations: const <NavigationDestination>[
+              NavigationDestination(
+                icon: Icon(Icons.calendar_month_outlined),
+                selectedIcon: Icon(Icons.calendar_month),
+                label: '日历',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.checklist_outlined),
+                selectedIcon: Icon(Icons.checklist),
+                label: '待办',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.mic_none_outlined),
+                selectedIcon: Icon(Icons.mic),
+                label: '声音',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.person_outline),
+                selectedIcon: Icon(Icons.person),
+                label: '我的',
+              ),
+            ],
           ),
-          NavigationDestination(
-            icon: Icon(Icons.mic_none_outlined),
-            selectedIcon: Icon(Icons.mic),
-            label: '声音',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.person_outline),
-            selectedIcon: Icon(Icons.person),
-            label: '我的',
-          ),
-        ],
+        ),
       ),
     );
   }

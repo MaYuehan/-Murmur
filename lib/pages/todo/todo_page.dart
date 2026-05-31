@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:murmur/core/theme/app_theme.dart';
 import 'package:murmur/core/utils/date_time_utils.dart';
+import 'package:murmur/core/utils/reminder_time_rules.dart';
 import 'package:murmur/models/reminder.dart';
 import 'package:murmur/providers/reminder_provider.dart';
-import 'package:murmur/services/voice_service.dart';
+import 'package:murmur/widgets/app_date_picker.dart';
+import 'package:murmur/widgets/app_slidable_action_button.dart';
+import 'package:murmur/widgets/app_ui.dart';
+import 'package:murmur/widgets/create_todo_sheet.dart';
 
 class TodoPage extends ConsumerStatefulWidget {
   const TodoPage({super.key});
@@ -17,262 +22,168 @@ class _TodoPageState extends ConsumerState<TodoPage> {
   bool _showCompleted = false;
 
   Future<void> _createTaskManually() async {
-    final TextEditingController controller = TextEditingController();
-    final TextEditingController remindTextController = TextEditingController();
-    bool remindEnabled = false;
-    DateTime? remindTime;
-    String remindFrequency = 'once';
-    String remindVoiceId = 'default';
+    await CreateTodoSheet.show(context);
+  }
 
-    final _TodoCreateResult? result = await showModalBottomSheet<_TodoCreateResult>(
+  Future<bool?> _confirmRemoveFromCalendar({int syncedCount = 1}) {
+    final String content = syncedCount > 1
+        ? '其中有 $syncedCount 项已同步到日历，是否一并删除日历中的截止事项？'
+        : '此待办已同步到日历，是否一并删除日历中的截止事项？';
+
+    return showDialog<bool>(
       context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
       builder: (BuildContext context) {
-        final MediaQueryData mediaQuery = MediaQuery.of(context);
-        return SingleChildScrollView(
-          child: Padding(
-            padding: EdgeInsets.only(
-              left: 16,
-              right: 16,
-              top: 10,
-              bottom: mediaQuery.viewInsets.bottom + 16,
+        return AlertDialog(
+          title: const Text('同时从日历移除？'),
+          content: Text(content),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('仅删待办'),
             ),
-            child: StatefulBuilder(
-              builder: (BuildContext context, StateSetter setModalState) {
-                return Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    const Text(
-                      '手动输入',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-                    ),
-                    const SizedBox(height: 10),
-                    TextField(
-                      controller: controller,
-                      autofocus: true,
-                      decoration: const InputDecoration(hintText: '添加待办事项...'),
-                    ),
-                    const SizedBox(height: 12),
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text('需要提醒'),
-                      value: remindEnabled,
-                      onChanged: (bool value) {
-                        setModalState(() => remindEnabled = value);
-                      },
-                    ),
-                    if (remindEnabled) ...<Widget>[
-                      const SizedBox(height: 8),
-                      OutlinedButton.icon(
-                        onPressed: () async {
-                          final DateTime now = DateTime.now();
-                          final DateTime? date = await showDatePicker(
-                            context: context,
-                            initialDate: now,
-                            firstDate: DateTime(now.year - 1, 1, 1),
-                            lastDate: DateTime(now.year + 3, 12, 31),
-                          );
-                          if (date == null || !mounted) {
-                            return;
-                          }
-                          final TimeOfDay? time = await showTimePicker(
-                            context: context,
-                            initialTime: TimeOfDay.fromDateTime(now),
-                          );
-                          if (time == null) {
-                            return;
-                          }
-                          setModalState(() {
-                            remindTime = DateTime(
-                              date.year,
-                              date.month,
-                              date.day,
-                              time.hour,
-                              time.minute,
-                            );
-                          });
-                        },
-                        icon: const Icon(Icons.schedule),
-                        label: Text(
-                          remindTime == null
-                              ? '选择提醒时间'
-                              : DateTimeUtils.formatDateTime(remindTime!),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      DropdownButtonFormField<String>(
-                        value: remindFrequency,
-                        decoration: const InputDecoration(labelText: '提醒频率'),
-                        items: const <DropdownMenuItem<String>>[
-                          DropdownMenuItem(value: 'once', child: Text('仅一次')),
-                          DropdownMenuItem(value: 'daily', child: Text('每天')),
-                          DropdownMenuItem(value: 'weekly', child: Text('每周')),
-                        ],
-                        onChanged: (String? value) {
-                          if (value == null) {
-                            return;
-                          }
-                          setModalState(() => remindFrequency = value);
-                        },
-                      ),
-                      const SizedBox(height: 8),
-                      TextField(
-                        controller: remindTextController,
-                        decoration: const InputDecoration(labelText: '提醒文案'),
-                      ),
-                      const SizedBox(height: 8),
-                      DropdownButtonFormField<String>(
-                        value: remindVoiceId,
-                        decoration: const InputDecoration(labelText: '提醒声音'),
-                        items: VoiceService.presetVoices
-                            .map(
-                              (VoiceOption voice) => DropdownMenuItem<String>(
-                                value: voice.id,
-                                child: Text(voice.name),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: (String? value) {
-                          if (value == null) {
-                            return;
-                          }
-                          setModalState(() => remindVoiceId = value);
-                        },
-                      ),
-                    ],
-                    const SizedBox(height: 12),
-                    if (remindEnabled && remindTime == null)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Text(
-                          '请先选择提醒时间',
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: Theme.of(context).colorScheme.error,
-                              ),
-                        ),
-                      ),
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton(
-                        onPressed: remindEnabled && remindTime == null
-                            ? null
-                            : () {
-                          Navigator.of(context).pop(
-                            _TodoCreateResult(
-                              title: controller.text.trim(),
-                              remindEnabled: remindEnabled,
-                              remindTime: remindTime,
-                              remindFrequency: remindFrequency,
-                              remindText: remindTextController.text.trim(),
-                              remindVoiceId: remindVoiceId,
-                            ),
-                          );
-                        },
-                        child: const Text('添加'),
-                      ),
-                    ),
-                  ],
-                );
-              },
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text(
+                '一并删除',
+                style: TextStyle(color: AppTheme.destructiveColor),
+              ),
             ),
-          ),
+          ],
         );
       },
     );
-    final String value = (result?.title ?? '').trim();
-    if (value.isEmpty) {
-      return;
+  }
+
+  Future<void> _deleteTodo(Reminder reminder) async {
+    bool alsoRemoveFromCalendar = false;
+    if (reminder.calendarLinkedId != null) {
+      final bool? confirmed = await _confirmRemoveFromCalendar();
+      if (confirmed == null || !mounted) {
+        return;
+      }
+      alsoRemoveFromCalendar = confirmed;
     }
 
-    final bool shouldRemind = result?.remindEnabled ?? false;
-    final DateTime? finalRemindTime = shouldRemind ? result?.remindTime : null;
-
-    await ref.read(reminderListProvider.notifier).addReminder(
-          title: value,
-          scheduledTime: null,
-          timeType: 'flexible',
-          remindEnabled: shouldRemind,
-          remindAt: finalRemindTime,
-          remindFrequency: result?.remindFrequency ?? 'once',
-          remindText: (result?.remindText ?? '').trim().isEmpty
-              ? null
-              : result?.remindText.trim(),
-          remindVoiceId: result?.remindVoiceId,
-          soundId: result?.remindVoiceId ?? 'default',
-          voiceId: result?.remindVoiceId ?? 'default',
+    await ref.read(reminderListProvider.notifier).deleteFlexibleTodo(
+          reminderId: reminder.id,
+          alsoRemoveFromCalendar: alsoRemoveFromCalendar,
         );
   }
 
-  Future<void> _showCreateMenu() async {
-    final String? action = await showModalBottomSheet<String>(
+  Future<void> _editTodo(Reminder reminder) async {
+    await CreateTodoSheet.show(context, editingReminder: reminder);
+  }
+
+  Future<bool?> _confirmUnlinkFromCalendar() {
+    return showDialog<bool>(
       context: context,
-      showDragHandle: true,
-      builder: (_) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            ListTile(
-              leading: const Icon(Icons.edit_outlined),
-              title: const Text('手动输入'),
-              onTap: () => Navigator.of(context).pop('manual'),
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('取消添加到日程？'),
+          content: const Text('此待办已同步到日历，是否从日历中移除对应日程？待办本身会保留。'),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('保留'),
             ),
-            ListTile(
-              leading: const Icon(Icons.mic_none_outlined),
-              title: const Text('语音输入'),
-              onTap: () => Navigator.of(context).pop('voice'),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text(
+                '从日历移除',
+                style: TextStyle(color: AppTheme.destructiveColor),
+              ),
             ),
           ],
-        ),
-      ),
-    );
-    if (!mounted || action == null) {
-      return;
-    }
-    if (action == 'manual') {
-      await _createTaskManually();
-      return;
-    }
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('语音输入功能开发中')),
+        );
+      },
     );
   }
 
+  Future<void> _onCalendarAction(Reminder reminder) async {
+    if (reminder.isSyncedToCalendar) {
+      final bool? confirmed = await _confirmUnlinkFromCalendar();
+      if (confirmed != true || !mounted) {
+        return;
+      }
+      await ref.read(reminderListProvider.notifier).unlinkFlexibleTodoFromCalendar(
+            reminderId: reminder.id,
+          );
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('已从日历移除')),
+      );
+      return;
+    }
+
+    await _showPromoteSheet(reminder);
+  }
+
   Future<void> _showPromoteSheet(Reminder reminder) async {
-    final DateTime now = DateTime.now();
-    final DateTime? date = await showDatePicker(
-      context: context,
-      initialDate: now,
-      firstDate: DateTime(now.year - 1, 1, 1),
-      lastDate: DateTime(now.year + 3, 12, 31),
-    );
-    if (date == null || !mounted) {
-      return;
+    DateTime? scheduledTime;
+    DateTime? endTime;
+    bool isAllDay = false;
+
+    if (!reminder.hasDeadline) {
+      final DateTime now = DateTime.now();
+      final AppScheduleSelection? selection = await showAppSchedulePicker(
+        context: context,
+        initialDate: now,
+        firstDate: DateTime(now.year - 1, 1, 1),
+        lastDate: DateTime(now.year + 3, 12, 31),
+        title: '添加到日程',
+      );
+      if (selection == null || !mounted) {
+        return;
+      }
+
+      if (selection.isAllDay) {
+        scheduledTime = ReminderTimeRules.eventStart(
+          eventDate: selection.eventDate,
+          isAllDay: true,
+          startDateTime: null,
+        );
+        endTime = ReminderTimeRules.eventEnd(
+          eventDate: selection.eventDate,
+          isAllDay: true,
+          startDateTime: null,
+          endDateTime: null,
+        );
+        isAllDay = true;
+      } else {
+        scheduledTime = DateTime(
+          selection.eventDate.year,
+          selection.eventDate.month,
+          selection.eventDate.day,
+          selection.startTime!.hour,
+          selection.startTime!.minute,
+        );
+        endTime = DateTime(
+          selection.eventDate.year,
+          selection.eventDate.month,
+          selection.eventDate.day,
+          selection.endTime!.hour,
+          selection.endTime!.minute,
+        );
+      }
     }
-    final TimeOfDay? time = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay.fromDateTime(now),
-    );
-    if (time == null) {
-      return;
-    }
-    final DateTime scheduled = DateTime(
-      date.year,
-      date.month,
-      date.day,
-      time.hour,
-      time.minute,
-    );
-    await ref.read(reminderListProvider.notifier).promoteReminderToFixed(
+
+    await ref.read(reminderListProvider.notifier).syncFlexibleTodoToCalendar(
           reminderId: reminder.id,
-          scheduledTime: scheduled,
+          scheduledTime: scheduledTime,
+          endTime: endTime,
+          isAllDay: isAllDay,
         );
     if (!mounted) {
       return;
     }
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('已安排时间，已同步到日历')),
+      SnackBar(
+        content: Text(
+          reminder.hasDeadline ? '已同步截止日程到日历' : '已同步到日历',
+        ),
+      ),
     );
   }
 
@@ -321,139 +232,34 @@ class _TodoPageState extends ConsumerState<TodoPage> {
     await ref.read(reminderListProvider.notifier).updateReminder(
           reminderId: reminder.id,
           title: value,
+          syncLinkedCalendar: reminder.isSyncedToCalendar,
         );
-  }
-
-  Future<void> _showEditSheet(Reminder reminder) async {
-    final TextEditingController titleController = TextEditingController(text: reminder.title);
-    final TextEditingController voiceIdController =
-        TextEditingController(text: reminder.voiceId ?? '');
-    final TextEditingController voicePathController =
-        TextEditingController(text: reminder.voicePath ?? '');
-    DateTime? scheduledTime = reminder.scheduledTime;
-
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (BuildContext context) {
-        final MediaQueryData mediaQuery = MediaQuery.of(context);
-        return StatefulBuilder(
-          builder: (BuildContext context, StateSetter setModalState) {
-            return SingleChildScrollView(
-              child: Padding(
-                padding: EdgeInsets.only(
-                  left: 16,
-                  right: 16,
-                  top: 10,
-                  bottom: mediaQuery.viewInsets.bottom + 16,
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: <Widget>[
-                  TextField(
-                    controller: titleController,
-                    decoration: const InputDecoration(labelText: '标题'),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: voiceIdController,
-                    decoration: const InputDecoration(labelText: 'voiceId（可选）'),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: voicePathController,
-                    decoration: const InputDecoration(labelText: 'voicePath（可选）'),
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: <Widget>[
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: () async {
-                            final DateTime now = DateTime.now();
-                            final DateTime? date = await showDatePicker(
-                              context: context,
-                              initialDate: scheduledTime ?? now,
-                              firstDate: DateTime(now.year - 1, 1, 1),
-                              lastDate: DateTime(now.year + 3, 12, 31),
-                            );
-                            if (date == null || !mounted) {
-                              return;
-                            }
-                            final TimeOfDay? time = await showTimePicker(
-                              context: context,
-                              initialTime: TimeOfDay.fromDateTime(scheduledTime ?? now),
-                            );
-                            if (time == null) {
-                              return;
-                            }
-                            setModalState(() {
-                              scheduledTime = DateTime(
-                                date.year,
-                                date.month,
-                                date.day,
-                                time.hour,
-                                time.minute,
-                              );
-                            });
-                          },
-                          icon: const Icon(Icons.schedule),
-                          label: Text(
-                            scheduledTime == null
-                                ? '设置时间（可选）'
-                                : DateTimeUtils.formatDateTime(scheduledTime!),
-                          ),
-                        ),
-                      ),
-                      if (scheduledTime != null)
-                        IconButton(
-                          onPressed: () => setModalState(() => scheduledTime = null),
-                          icon: const Icon(Icons.close),
-                        ),
-                    ],
-                  ),
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton(
-                        onPressed: () async {
-                        final String title = titleController.text.trim();
-                        if (title.isEmpty) {
-                          return;
-                        }
-                        await ref.read(reminderListProvider.notifier).updateReminder(
-                              reminderId: reminder.id,
-                              title: title,
-                              scheduledTime: scheduledTime,
-                              timeType: scheduledTime != null ? 'fixed' : 'flexible',
-                              voiceId: voiceIdController.text.trim().isEmpty
-                                  ? null
-                                  : voiceIdController.text.trim(),
-                              voicePath: voicePathController.text.trim().isEmpty
-                                  ? null
-                                  : voicePathController.text.trim(),
-                            );
-                        if (!mounted) {
-                          return;
-                        }
-                        Navigator.of(context).pop();
-                        },
-                        child: const Text('保存编辑'),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
   }
 
   Future<void> _clearCompleted() async {
-    await ref.read(reminderListProvider.notifier).clearCompletedFlexibleReminders();
+    final ReminderNotifier notifier = ref.read(reminderListProvider.notifier);
+    final List<Reminder> completedWithCalendar = notifier
+        .getFlexibleReminders(includeCompleted: true)
+        .where(
+          (Reminder reminder) =>
+              reminder.isCompleted && reminder.calendarLinkedId != null,
+        )
+        .toList();
+
+    bool alsoRemoveFromCalendar = false;
+    if (completedWithCalendar.isNotEmpty) {
+      final bool? confirmed = await _confirmRemoveFromCalendar(
+        syncedCount: completedWithCalendar.length,
+      );
+      if (confirmed == null || !mounted) {
+        return;
+      }
+      alsoRemoveFromCalendar = confirmed;
+    }
+
+    await notifier.clearCompletedFlexibleReminders(
+      alsoRemoveFromCalendar: alsoRemoveFromCalendar,
+    );
     if (!mounted) {
       return;
     }
@@ -482,25 +288,32 @@ class _TodoPageState extends ConsumerState<TodoPage> {
       appBar: AppBar(
         title: const Text('待办'),
         actions: <Widget>[
-          IconButton(
-            onPressed: _showCreateMenu,
-            icon: const Icon(Icons.add),
-            tooltip: '新增',
-          ),
+          AppBarTextAction(label: '新建', onPressed: _createTaskManually),
         ],
       ),
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          padding: const EdgeInsets.symmetric(horizontal: AppTheme.pagePadding),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              const SizedBox(height: 10),
-              Text('待安排', style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 10),
+              const SizedBox(height: 8),
+              AppSectionHeader(
+                title: '待办',
+                trailing: pending.isNotEmpty
+                    ? Text(
+                        '${pending.length}',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      )
+                    : null,
+              ),
               Expanded(
                 child: pending.isEmpty && completed.isEmpty
-                    ? const Center(child: Text('还没有待办事项'))
+                    ? const AppEmptyState(
+                        icon: Icons.checklist_outlined,
+                        title: '还没有待办事项',
+                        subtitle: '点击右上角「新建」添加',
+                      )
                     : ListView(
                         children: <Widget>[
                           ...pending.map((Reminder reminder) {
@@ -510,32 +323,30 @@ class _TodoPageState extends ConsumerState<TodoPage> {
                                 key: ValueKey<String>('todo_${reminder.id}'),
                                 endActionPane: ActionPane(
                                   motion: const DrawerMotion(),
-                                  extentRatio: 0.42,
+                                  extentRatio: 0.36,
                                   children: <Widget>[
-                                    SlidableAction(
-                                      onPressed: (_) => _showPromoteSheet(reminder),
-                                      icon: Icons.calendar_today_outlined,
-                                      label: '',
-                                      backgroundColor: const Color(0xFF007AFF),
-                                      foregroundColor: Colors.white,
+                                    AppSlidableActionButton(
+                                      onPressed: () => _onCalendarAction(reminder),
+                                      icon: reminder.isSyncedToCalendar
+                                          ? Icons.event_busy_outlined
+                                          : Icons.calendar_today_outlined,
+                                      iconColor: AppTheme.iosBlue,
+                                      backgroundColor:
+                                          AppTheme.iosBlue.withValues(alpha: 0.16),
                                     ),
-                                    SlidableAction(
-                                      onPressed: (_) => _showEditSheet(reminder),
+                                    AppSlidableActionButton(
+                                      onPressed: () => _editTodo(reminder),
                                       icon: Icons.edit_outlined,
-                                      label: '',
-                                      backgroundColor: const Color(0xFF8E8E93),
-                                      foregroundColor: Colors.white,
+                                      iconColor: AppTheme.primaryColor,
+                                      backgroundColor:
+                                          AppTheme.primaryColor.withValues(alpha: 0.18),
                                     ),
-                                    SlidableAction(
-                                      onPressed: (_) async {
-                                        await ref
-                                            .read(reminderListProvider.notifier)
-                                            .deleteReminder(reminder.id);
-                                      },
+                                    AppSlidableActionButton(
+                                      onPressed: () => _deleteTodo(reminder),
                                       icon: Icons.delete_outline,
-                                      label: '',
-                                      backgroundColor: const Color(0xFFFF3B30),
-                                      foregroundColor: Colors.white,
+                                      iconColor: AppTheme.destructiveColor,
+                                      backgroundColor:
+                                          AppTheme.destructiveColor.withValues(alpha: 0.16),
                                     ),
                                   ],
                                 ),
@@ -549,49 +360,92 @@ class _TodoPageState extends ConsumerState<TodoPage> {
                             );
                           }),
                           if (completed.isNotEmpty) ...<Widget>[
-                            const SizedBox(height: 8),
-                            InkWell(
-                              borderRadius: BorderRadius.circular(10),
-                              onTap: () {
-                                setState(() {
-                                  _showCompleted = !_showCompleted;
-                                });
-                              },
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(vertical: 6),
-                                child: Row(
-                                  children: <Widget>[
-                                    Icon(
-                                      _showCompleted
-                                          ? Icons.keyboard_arrow_down
-                                          : Icons.keyboard_arrow_right,
-                                      size: 20,
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Expanded(
-                                      child: Text(
-                                        '已完成 (${completed.length})',
-                                        style: Theme.of(context).textTheme.titleMedium,
+                            const SizedBox(height: 12),
+                            AppGroupedSection(
+                              children: <Widget>[
+                                Material(
+                                  color: Colors.transparent,
+                                  child: InkWell(
+                                    onTap: () {
+                                      setState(() {
+                                        _showCompleted = !_showCompleted;
+                                      });
+                                    },
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 14,
+                                        vertical: 12,
+                                      ),
+                                      child: Row(
+                                        children: <Widget>[
+                                          Icon(
+                                            _showCompleted
+                                                ? Icons.keyboard_arrow_down
+                                                : Icons.keyboard_arrow_right,
+                                            size: 22,
+                                            color: AppTheme.secondaryLabelColor,
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: Text(
+                                              '已完成',
+                                              style: Theme.of(context).textTheme.titleSmall,
+                                            ),
+                                          ),
+                                          Text(
+                                            '${completed.length}',
+                                            style: Theme.of(context).textTheme.bodySmall,
+                                          ),
+                                        ],
                                       ),
                                     ),
-                                    TextButton(
-                                      onPressed: _clearCompleted,
-                                      child: const Text('清除已完成'),
-                                    ),
-                                  ],
+                                  ),
                                 ),
-                              ),
+                                if (_showCompleted)
+                                  Divider(
+                                    height: 1,
+                                    thickness: 0.5,
+                                    color: AppTheme.separatorColor,
+                                  ),
+                                if (_showCompleted)
+                                  Padding(
+                                    padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
+                                    child: Align(
+                                      alignment: Alignment.centerRight,
+                                      child: TextButton(
+                                        onPressed: _clearCompleted,
+                                        child: const Text('清除已完成'),
+                                      ),
+                                    ),
+                                  ),
+                              ],
                             ),
                             if (_showCompleted) ...<Widget>[
                               const SizedBox(height: 8),
                               ...completed.map((Reminder reminder) {
                                 return Padding(
                                   padding: const EdgeInsets.only(bottom: 10),
-                                  child: _TodoCard(
-                                    reminder: reminder,
-                                    onTapText: () => _showInlineTitleEdit(reminder),
-                                    onCheckChanged: (bool? checked) =>
-                                        _toggleComplete(reminder, checked),
+                                  child: Slidable(
+                                    key: ValueKey<String>('todo_done_${reminder.id}'),
+                                    endActionPane: ActionPane(
+                                      motion: const DrawerMotion(),
+                                      extentRatio: 0.14,
+                                      children: <Widget>[
+                                        AppSlidableActionButton(
+                                          onPressed: () => _deleteTodo(reminder),
+                                          icon: Icons.delete_outline,
+                                          iconColor: AppTheme.destructiveColor,
+                                          backgroundColor: AppTheme.destructiveColor
+                                              .withValues(alpha: 0.16),
+                                        ),
+                                      ],
+                                    ),
+                                    child: _TodoCard(
+                                      reminder: reminder,
+                                      onTapText: () => _showInlineTitleEdit(reminder),
+                                      onCheckChanged: (bool? checked) =>
+                                          _toggleComplete(reminder, checked),
+                                    ),
                                   ),
                                 );
                               }),
@@ -608,24 +462,6 @@ class _TodoPageState extends ConsumerState<TodoPage> {
   }
 }
 
-class _TodoCreateResult {
-  const _TodoCreateResult({
-    required this.title,
-    required this.remindEnabled,
-    required this.remindTime,
-    required this.remindFrequency,
-    required this.remindText,
-    required this.remindVoiceId,
-  });
-
-  final String title;
-  final bool remindEnabled;
-  final DateTime? remindTime;
-  final String remindFrequency;
-  final String remindText;
-  final String remindVoiceId;
-}
-
 class _TodoCard extends StatelessWidget {
   const _TodoCard({
     required this.reminder,
@@ -640,59 +476,123 @@ class _TodoCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final Color textColor = reminder.isCompleted
-        ? Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.6) ??
-            const Color(0xFF666666)
-        : const Color(0xFF2B2B2B);
+        ? AppTheme.secondaryLabelColor
+        : AppTheme.textPrimaryColor;
 
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Checkbox(
-                  value: reminder.isCompleted,
-                  onChanged: onCheckChanged,
-                  visualDensity: VisualDensity.compact,
-                ),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: GestureDetector(
-                    onTap: onTapText,
-                    child: Padding(
-                      padding: const EdgeInsets.only(top: 6),
-                      child: Text(
-                        reminder.title,
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              color: textColor,
-                              decoration: reminder.isCompleted
-                                  ? TextDecoration.lineThrough
-                                  : TextDecoration.none,
-                            ),
-                      ),
+    return AppGroupedSection(
+      children: <Widget>[
+        Padding(
+          padding: const EdgeInsets.fromLTRB(6, 4, 10, 4),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: <Widget>[
+              Checkbox(
+                value: reminder.isCompleted,
+                onChanged: onCheckChanged,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                visualDensity: VisualDensity.compact,
+              ),
+              Expanded(
+                child: GestureDetector(
+                  onTap: onTapText,
+                  behavior: HitTestBehavior.opaque,
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 10, bottom: 10),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text(
+                          reminder.title,
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                color: textColor,
+                                decoration: reminder.isCompleted
+                                    ? TextDecoration.lineThrough
+                                    : TextDecoration.none,
+                                height: 1.3,
+                              ),
+                        ),
+                        if (reminder.hasDeadline) ...<Widget>[
+                          const SizedBox(height: 4),
+                          Row(
+                            children: <Widget>[
+                              Icon(
+                                Icons.flag_outlined,
+                                size: 13,
+                                color: reminder.isCompleted
+                                    ? AppTheme.secondaryLabelColor
+                                    : AppTheme.deadlineColor,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                '截止 ${DateTimeUtils.formatDateTime(reminder.deadlineAt!)}',
+                                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                      color: reminder.isCompleted
+                                          ? AppTheme.secondaryLabelColor
+                                          : AppTheme.deadlineColor,
+                                      fontWeight: FontWeight.w600,
+                                      decoration: reminder.isCompleted
+                                          ? TextDecoration.lineThrough
+                                          : TextDecoration.none,
+                                    ),
+                              ),
+                              if (reminder.isSyncedToCalendar) ...<Widget>[
+                                const SizedBox(width: 6),
+                                Icon(
+                                  Icons.calendar_today_outlined,
+                                  size: 12,
+                                  color: AppTheme.secondaryLabelColor,
+                                ),
+                              ],
+                            ],
+                          ),
+                        ],
+                        if (reminder.isSyncedToCalendar && !reminder.hasDeadline) ...<Widget>[
+                          const SizedBox(height: 4),
+                          Icon(
+                            Icons.calendar_today_outlined,
+                            size: 12,
+                            color: AppTheme.secondaryLabelColor,
+                          ),
+                        ],
+                        if (reminder.remindEnabled) ...<Widget>[
+                          const SizedBox(height: 4),
+                          Row(
+                            children: <Widget>[
+                              Icon(
+                                Icons.notifications_outlined,
+                                size: 13,
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                reminder.remindAt != null
+                                    ? ReminderTimeRules.remindPreviewLabel(
+                                    remindAt: reminder.remindAt,
+                                    frequency: reminder.remindFrequency,
+                                    repeatDays: reminder.remindRepeatDays,
+                                  )
+                                    : '已设提醒',
+                                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                      color: Theme.of(context).colorScheme.primary,
+                                    ),
+                              ),
+                            ],
+                          ),
+                        ],
+                        const SizedBox(height: 2),
+                        Text(
+                          '创建于 ${DateTimeUtils.formatDate(reminder.createdAt)}',
+                          style: Theme.of(context).textTheme.labelSmall,
+                        ),
+                      ],
                     ),
                   ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: <Widget>[
-                Chip(
-                  label: Text('创建于 ${DateTimeUtils.formatDateTime(reminder.createdAt)}'),
-                  visualDensity: VisualDensity.compact,
-                ),
-              ],
-            ),
-          ],
+              ),
+            ],
+          ),
         ),
-      ),
+      ],
     );
   }
 }

@@ -21,9 +21,15 @@ class VoiceSelector extends StatefulWidget {
   const VoiceSelector({
     super.key,
     required this.onChanged,
+    this.initialVoiceId,
+    this.initialVoicePath,
+    this.initialIsCustomVoice = false,
   });
 
   final ValueChanged<SelectedVoice> onChanged;
+  final String? initialVoiceId;
+  final String? initialVoicePath;
+  final bool initialIsCustomVoice;
 
   @override
   State<VoiceSelector> createState() => _VoiceSelectorState();
@@ -40,6 +46,15 @@ class _VoiceSelectorState extends State<VoiceSelector> {
   @override
   void initState() {
     super.initState();
+    if (widget.initialIsCustomVoice &&
+        widget.initialVoicePath != null &&
+        widget.initialVoicePath!.isNotEmpty) {
+      _selectedId = 'my_recorded_voice';
+      _recordingPath = widget.initialVoicePath;
+    } else if (widget.initialVoiceId != null &&
+        widget.initialVoiceId!.isNotEmpty) {
+      _selectedId = widget.initialVoiceId!;
+    }
     _loadRecordings();
     _notifySelection();
   }
