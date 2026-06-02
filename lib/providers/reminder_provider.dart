@@ -44,20 +44,6 @@ class ReminderNotifier extends StateNotifier<List<Reminder>> {
     }
   }
 
-  bool _shouldRemoveLinkedCalendar({
-    required Reminder linkedCalendar,
-    DateTime? deadlineAt,
-    required bool syncToCalendar,
-  }) {
-    if (!linkedCalendar.isTodoDeadline) {
-      return false;
-    }
-    if (deadlineAt == null) {
-      return true;
-    }
-    return !syncToCalendar;
-  }
-
   Future<void> addReminder({
     required String title,
     DateTime? scheduledTime,
@@ -211,14 +197,41 @@ class ReminderNotifier extends StateNotifier<List<Reminder>> {
 
     if (calendarLinkedId != null) {
       final Reminder? linkedCalendar = getReminderById(calendarLinkedId);
-      if (linkedCalendar != null &&
-          _shouldRemoveLinkedCalendar(
-            linkedCalendar: linkedCalendar,
-            deadlineAt: deadlineAt,
-            syncToCalendar: syncToCalendar,
-          )) {
-        await deleteReminder(calendarLinkedId);
-        calendarLinkedId = null;
+      if (linkedCalendar != null) {
+        // Deadline todo with sync turned off should remove linked calendar entry.
+        if (deadlineAt != null && !syncToCalendar) {
+          await deleteReminder(calendarLinkedId);
+          calendarLinkedId = null;
+        }
+
+        if (calendarLinkedId != null) {
+          // Convert linked calendar entry to deadline mode when todo becomes a deadline.
+          if (deadlineAt != null && !linkedCalendar.isTodoDeadline) {
+            await updateReminder(
+              reminderId: calendarLinkedId,
+              isTodoDeadline: true,
+              scheduledTime: deadlineAt,
+              clearEndTime: true,
+              isAllDay: false,
+              syncLinkedTodo: false,
+            );
+          }
+
+          // Convert linked deadline entry back to normal calendar entry when deadline is removed.
+          if (deadlineAt == null && linkedCalendar.isTodoDeadline) {
+            final DateTime fallbackStart =
+                linkedCalendar.scheduledTime ?? DateTime.now();
+            await updateReminder(
+              reminderId: calendarLinkedId,
+              isTodoDeadline: false,
+              scheduledTime: fallbackStart,
+              endTime:
+                  linkedCalendar.endTime ?? fallbackStart.add(const Duration(hours: 1)),
+              isAllDay: false,
+              syncLinkedTodo: false,
+            );
+          }
+        }
       }
     } else if (wantsDeadlineCalendarSync) {
       calendarLinkedId = '${reminderId}_cal';

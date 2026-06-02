@@ -4,6 +4,7 @@ import 'package:murmur/core/theme/app_theme.dart';
 import 'package:murmur/core/utils/app_settings_storage.dart';
 import 'package:murmur/l10n/app_localizations.dart';
 import 'package:murmur/providers/locale_provider.dart';
+import 'package:murmur/providers/todo_display_settings_provider.dart';
 import 'package:murmur/widgets/app_ui.dart';
 
 class ProfilePage extends ConsumerStatefulWidget {
@@ -28,6 +29,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final Locale locale = ref.watch(localeProvider);
+    final bool showTodoCreatedDate = ref.watch(showTodoCreatedDateProvider);
 
     return Scaffold(
       appBar: AppBar(title: Text(l10n.profilePageTitle)),
@@ -88,6 +90,22 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                 value: _voiceRemindMuted,
                 activeThumbColor: AppTheme.primaryColor,
                 onChanged: _setVoiceRemindMuted,
+              ),
+              SwitchListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                secondary: const Icon(
+                  Icons.schedule_outlined,
+                  color: AppTheme.secondaryLabelColor,
+                ),
+                title: Text(l10n.profileShowTodoCreatedDateTitle),
+                subtitle: Text(l10n.profileShowTodoCreatedDateSubtitle),
+                value: showTodoCreatedDate,
+                activeThumbColor: AppTheme.primaryColor,
+                onChanged: (bool value) {
+                  ref
+                      .read(showTodoCreatedDateProvider.notifier)
+                      .setShowTodoCreatedDate(value);
+                },
               ),
             ],
           ),

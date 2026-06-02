@@ -212,11 +212,22 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
   Widget _buildMonthCalendar(ReminderNotifier notifier) {
     final ColorScheme scheme = Theme.of(context).colorScheme;
 
-    return AppGroupedSection(
-      children: <Widget>[
-        Padding(
-          padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
-          child: TableCalendar<void>(
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(AppTheme.groupedRadius),
+        boxShadow: <BoxShadow>[
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: AppGroupedSection(
+        children: <Widget>[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
+            child: TableCalendar<void>(
             firstDay: DateTime(2020, 1, 1),
             lastDay: DateTime(2035, 12, 31),
             focusedDay: _focusedDay,
@@ -301,9 +312,10 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
                 );
               },
             ),
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -314,11 +326,22 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
     final DateTime weekEnd = weekDays.last;
     final bool isCurrentWeek = _isCurrentWeek(_selectedDay);
 
-    return AppGroupedSection(
-      children: <Widget>[
-        Padding(
-          padding: const EdgeInsets.fromLTRB(4, 8, 4, 12),
-          child: Column(
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(AppTheme.groupedRadius),
+        boxShadow: <BoxShadow>[
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: AppGroupedSection(
+        children: <Widget>[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 8, 4, 12),
+            child: Column(
             children: <Widget>[
               Row(
                 children: <Widget>[
@@ -430,22 +453,91 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
                 }).toList(),
               ),
             ],
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
   Widget _buildReminderList(List<Reminder> reminders) {
-    return ListView.separated(
+    final List<Reminder> deadlineReminders = reminders
+        .where((Reminder reminder) => reminder.isTodoDeadline)
+        .toList();
+    final List<Reminder> normalReminders = reminders
+        .where((Reminder reminder) => !reminder.isTodoDeadline)
+        .toList();
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    final TextStyle deadlineSectionTitleStyle =
+        Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: AppTheme.deadlineColor,
+              fontWeight: FontWeight.w600,
+            ) ??
+            const TextStyle(
+              fontSize: 12,
+              color: AppTheme.deadlineColor,
+              fontWeight: FontWeight.w600,
+            );
+    final TextStyle scheduleSectionTitleStyle =
+        Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: AppTheme.primaryColor,
+              fontWeight: FontWeight.w600,
+            ) ??
+            const TextStyle(
+              fontSize: 12,
+              color: AppTheme.primaryColor,
+              fontWeight: FontWeight.w600,
+            );
+
+    final List<Widget> items = <Widget>[];
+    if (deadlineReminders.isNotEmpty) {
+      items.add(
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8, top: 2),
+          child: Text(
+            l10n.calendarDeadlineSection,
+            style: deadlineSectionTitleStyle,
+          ),
+        ),
+      );
+      for (final Reminder reminder in deadlineReminders) {
+        items.add(
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: _buildSlidableReminderCard(reminder),
+          ),
+        );
+      }
+    }
+
+    if (normalReminders.isNotEmpty) {
+      items.add(
+        Padding(
+          padding: EdgeInsets.only(
+            bottom: 8,
+            top: deadlineReminders.isNotEmpty ? 2 : 2,
+          ),
+          child: Text(
+            l10n.calendarScheduleSection,
+            style: scheduleSectionTitleStyle,
+          ),
+        ),
+      );
+    }
+
+    for (final Reminder reminder in normalReminders) {
+      items.add(
+        Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: _buildSlidableReminderCard(reminder),
+        ),
+      );
+    }
+
+    return ListView(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      itemCount: reminders.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 10),
-      itemBuilder: (BuildContext context, int index) {
-        final Reminder reminder = reminders[index];
-        return _buildSlidableReminderCard(reminder);
-      },
+      children: items,
     );
   }
 
@@ -553,13 +645,11 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
           ),
         ),
       );
-      for (final Reminder reminder in reminders) {
-        sections.add(
-          Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: _buildSlidableReminderCard(reminder),
-          ),
-        );
+      sections.add(
+        _buildReminderList(reminders),
+      );
+      if (day != weekDays.last) {
+        sections.add(const SizedBox(height: 2));
       }
     }
 

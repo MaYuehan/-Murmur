@@ -37,13 +37,24 @@ class ReminderCard extends StatelessWidget {
       timeLabel = DateTimeUtils.formatTime(scheduledTime);
     }
 
-    return Material(
-      color: AppTheme.cardColor,
-      borderRadius: BorderRadius.circular(AppTheme.groupedRadius),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Container(
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(AppTheme.groupedRadius),
+        boxShadow: <BoxShadow>[
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Material(
+        color: AppTheme.cardColor,
+        borderRadius: BorderRadius.circular(AppTheme.groupedRadius),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Container(
           decoration: BoxDecoration(
             border: isHighlighted
                 ? Border.all(color: scheme.primary, width: 1.5)
@@ -185,6 +196,7 @@ class ReminderCard extends StatelessWidget {
                   ),
                 ),
             ],
+          ),
           ),
         ),
       ),

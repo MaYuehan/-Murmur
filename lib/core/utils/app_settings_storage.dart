@@ -5,6 +5,7 @@ class AppSettingsStorage {
   static const String _boxName = 'app_settings_box';
   static const String _voiceRemindMutedKey = 'voice_remind_muted';
   static const String _appLocaleKey = 'app_locale';
+  static const String _showTodoCreatedDateKey = 'show_todo_created_date';
 
   static Future<void> init() async {
     await Hive.openBox<dynamic>(_boxName);
@@ -27,5 +28,13 @@ class AppSettingsStorage {
 
   static Future<void> setAppLocale(String languageCode) async {
     await _box.put(_appLocaleKey, languageCode);
+  }
+
+  static bool get showTodoCreatedDate {
+    return _box.get(_showTodoCreatedDateKey) as bool? ?? true;
+  }
+
+  static Future<void> setShowTodoCreatedDate(bool value) async {
+    await _box.put(_showTodoCreatedDateKey, value);
   }
 }

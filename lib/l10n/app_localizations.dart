@@ -55,6 +55,12 @@ class AppLocalizations {
         '开启后，到点只显示通知，不自动播放亲声',
         'When on, notifications appear without auto-playing voice',
       );
+  String get profileShowTodoCreatedDateTitle =>
+      _t('显示待办创建日期', 'Show task created date');
+  String get profileShowTodoCreatedDateSubtitle => _t(
+        '在待办列表卡片底部显示创建日期',
+        'Show the created date at the bottom of task cards',
+      );
   String get profileSectionLanguage => _t('语言', 'Language');
   String get profileLanguageChinese => _t('中文', 'Chinese');
   String get profileLanguageEnglish => 'English';
@@ -81,6 +87,8 @@ class AppLocalizations {
   String get calendarWeekAgendaTitle => _t('本周日程', 'This week');
   String get calendarScopeThisWeek => _t('本周', 'Week');
   String get calendarScopeSelectedDay => _t('当天', 'Day');
+  String get calendarDeadlineSection => _t('截止', 'Deadline');
+  String get calendarScheduleSection => _t('日程', 'Schedule');
   String calendarEmptyDayNamedTitle(String date) =>
       _t('$date 暂无日程', 'No events on $date');
   String get calendarEmptyWeekTitle => _t('本周暂无日程', 'No events this week');
@@ -96,6 +104,8 @@ class AppLocalizations {
   // Todo
   String get todoPageTitle => _t('待办', 'Tasks');
   String get todoSectionTitle => _t('待办', 'Tasks');
+  String get todoDeadlineSection => _t('截止待办', 'Deadline Tasks');
+  String get todoNormalSection => _t('普通待办', 'Tasks');
   String get todoEmptyTitle => _t('还没有待办事项', 'No tasks yet');
   String get todoEmptySubtitle =>
       _t('点击右上角「新建」添加', 'Tap “New” at top right to add');
