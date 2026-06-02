@@ -113,6 +113,12 @@ class AppLocalizations {
       _t('点击右上角「新建」添加', 'Tap “New” at top right to add');
   String get todoCompletedSection => _t('已完成', 'Completed');
   String get todoClearCompleted => _t('清除已完成', 'Clear completed');
+  String get todoClearCompletedConfirmTitle =>
+      _t('清除已完成？', 'Clear completed tasks?');
+  String todoClearCompletedConfirmBody(int count) => _t(
+        '确定要清除 $count 项已完成待办吗？',
+        'Clear $count completed task(s)?',
+      );
   String todoDeadlineLabel(String datetime) => _t('截止 $datetime', 'Due $datetime');
   String get todoReminderSet => _t('已设提醒', 'Reminder set');
   String todoCreatedAt(String date) => _t('创建于 $date', 'Created $date');

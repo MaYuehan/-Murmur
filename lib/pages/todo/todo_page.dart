@@ -221,6 +221,40 @@ class _TodoPageState extends ConsumerState<TodoPage> {
         );
   }
 
+  Future<bool?> _confirmClearCompleted(int count) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    return showDialog<bool>(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          title: Text(l10n.todoClearCompletedConfirmTitle),
+          content: Text(l10n.todoClearCompletedConfirmBody(count)),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: Text(l10n.commonCancel),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: Text(
+                l10n.todoClearCompleted,
+                style: const TextStyle(color: AppTheme.destructiveColor),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _onClearCompletedPressed(int count) async {
+    final bool? confirmed = await _confirmClearCompleted(count);
+    if (confirmed != true || !mounted) {
+      return;
+    }
+    await _clearCompleted();
+  }
+
   Future<void> _clearCompleted() async {
     final ReminderNotifier notifier = ref.read(reminderListProvider.notifier);
     final List<Reminder> completedWithCalendar = notifier
@@ -357,313 +391,18 @@ class _TodoPageState extends ConsumerState<TodoPage> {
                         title: l10n.todoEmptyTitle,
                         subtitle: l10n.todoEmptySubtitle,
                       )
-                    : ListView(
-                        children: <Widget>[
-                          ...<Widget>[
-                            (_showDeadlineTodos
-                                ? Material(
-                                    color: Colors.transparent,
-                                    child: InkWell(
-                                      borderRadius: BorderRadius.circular(10),
-                                      onTap: () {
-                                        setState(() => _showDeadlineTodos = !_showDeadlineTodos);
-                                      },
-                                      child: Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                          vertical: 10,
-                                        ),
-                                        child: Row(
-                                          children: <Widget>[
-                                            Icon(
-                                              Icons.keyboard_arrow_down,
-                                              size: 20,
-                                              color: deadlineHeaderColor,
-                                            ),
-                                            const SizedBox(width: 6),
-                                            Expanded(
-                                              child: Text(
-                                                l10n.todoDeadlineSection,
-                                                style: Theme.of(context)
-                                                    .textTheme
-                                                    .labelSmall
-                                                    ?.copyWith(
-                                                      color: deadlineHeaderColor,
-                                                      fontWeight: FontWeight.w600,
-                                                    ),
-                                              ),
-                                            ),
-                                            Text(
-                                              '${pendingDeadline.length}',
-                                              style: Theme.of(context)
-                                                  .textTheme
-                                                  .labelSmall
-                                                  ?.copyWith(
-                                                    color: deadlineHeaderColor,
-                                                  ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  )
-                                : AppGroupedSection(
-                                    children: <Widget>[
-                                      Material(
-                                        color: Colors.transparent,
-                                        child: InkWell(
-                                          onTap: () {
-                                            setState(() => _showDeadlineTodos = !_showDeadlineTodos);
-                                          },
-                                          child: Padding(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 14,
-                                              vertical: 12,
-                                            ),
-                                            child: Row(
-                                              children: <Widget>[
-                                                Icon(
-                                                  Icons.keyboard_arrow_right,
-                                                  size: 22,
-                                                  color: deadlineHeaderColor,
-                                                ),
-                                                const SizedBox(width: 8),
-                                                Expanded(
-                                                  child: Text(
-                                                    l10n.todoDeadlineSection,
-                                                    style: Theme.of(context)
-                                                        .textTheme
-                                                        .titleSmall
-                                                        ?.copyWith(color: deadlineHeaderColor),
-                                                  ),
-                                                ),
-                                                Text(
-                                                  '${pendingDeadline.length}',
-                                                  style: Theme.of(context)
-                                                      .textTheme
-                                                      .bodySmall
-                                                      ?.copyWith(color: deadlineHeaderColor),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  )),
-                          
-                            if (_showDeadlineTodos && pendingDeadline.isNotEmpty)
-                              ...pendingDeadline.map(
-                                (Reminder reminder) =>
-                                    _buildPendingTodoItem(
-                                      reminder,
-                                      reminderNotifier,
-                                      showCreatedDate: showTodoCreatedDate,
-                                    ),
-                              ),
-                            
-                          ],
-                          ...<Widget>[
-                            (_showNormalTodos
-                                ? Material(
-                                    color: Colors.transparent,
-                                    child: InkWell(
-                                      borderRadius: BorderRadius.circular(10),
-                                      onTap: () {
-                                        setState(() => _showNormalTodos = !_showNormalTodos);
-                                      },
-                                      child: Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                          vertical: 10,
-                                        ),
-                                        child: Row(
-                                          children: <Widget>[
-                                            Icon(
-                                              Icons.keyboard_arrow_down,
-                                              size: 20,
-                                              color: normalHeaderColor,
-                                            ),
-                                            const SizedBox(width: 6),
-                                            Expanded(
-                                              child: Text(
-                                                l10n.todoNormalSection,
-                                                style: Theme.of(context)
-                                                    .textTheme
-                                                    .labelSmall
-                                                    ?.copyWith(
-                                                      color: normalHeaderColor,
-                                                      fontWeight: FontWeight.w600,
-                                                    ),
-                                              ),
-                                            ),
-                                            Text(
-                                              '${pendingNormal.length}',
-                                              style: Theme.of(context)
-                                                  .textTheme
-                                                  .labelSmall
-                                                  ?.copyWith(
-                                                    color: normalHeaderColor,
-                                                  ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  )
-                                : AppGroupedSection(
-                                    children: <Widget>[
-                                      Material(
-                                        color: Colors.transparent,
-                                        child: InkWell(
-                                          onTap: () {
-                                            setState(() => _showNormalTodos = !_showNormalTodos);
-                                          },
-                                          child: Padding(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 14,
-                                              vertical: 12,
-                                            ),
-                                            child: Row(
-                                              children: <Widget>[
-                                                Icon(
-                                                  Icons.keyboard_arrow_right,
-                                                  size: 22,
-                                                  color: normalHeaderColor,
-                                                ),
-                                                const SizedBox(width: 8),
-                                                Expanded(
-                                                  child: Text(
-                                                    l10n.todoNormalSection,
-                                                    style: Theme.of(context)
-                                                        .textTheme
-                                                        .titleSmall
-                                                        ?.copyWith(color: normalHeaderColor),
-                                                  ),
-                                                ),
-                                                Text(
-                                                  '${pendingNormal.length}',
-                                                  style: Theme.of(context)
-                                                      .textTheme
-                                                      .bodySmall
-                                                      ?.copyWith(color: normalHeaderColor),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  )),
-                      
-                            if (_showNormalTodos && pendingNormal.isNotEmpty)
-                              ...pendingNormal.map(
-                                (Reminder reminder) =>
-                                    _buildPendingTodoItem(
-                                      reminder,
-                                      reminderNotifier,
-                                      showCreatedDate: showTodoCreatedDate,
-                                    ),
-                              ),
-                            const SizedBox(height: 6),
-                          ],
-                          if (completed.isNotEmpty) ...<Widget>[
-                            const SizedBox(height: 12),
-                            AppGroupedSection(
-                              children: <Widget>[
-                                Material(
-                                  color: Colors.transparent,
-                                  child: InkWell(
-                                    onTap: () {
-                                      setState(() {
-                                        _showCompleted = !_showCompleted;
-                                      });
-                                    },
-                                    child: Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 14,
-                                        vertical: 12,
-                                      ),
-                                      child: Row(
-                                        children: <Widget>[
-                                          Icon(
-                                            _showCompleted
-                                                ? Icons.keyboard_arrow_down
-                                                : Icons.keyboard_arrow_right,
-                                            size: 22,
-                                            color: AppTheme.secondaryLabelColor,
-                                          ),
-                                          const SizedBox(width: 8),
-                                          Expanded(
-                                            child: Text(
-                                              l10n.todoCompletedSection,
-                                              style: Theme.of(context).textTheme.titleSmall,
-                                            ),
-                                          ),
-                                          Text(
-                                            '${completed.length}',
-                                            style: Theme.of(context).textTheme.bodySmall,
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                if (_showCompleted)
-                                  Divider(
-                                    height: 1,
-                                    thickness: 0.5,
-                                    color: AppTheme.separatorColor,
-                                  ),
-                                if (_showCompleted)
-                                  Padding(
-                                    padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
-                                    child: Align(
-                                      alignment: Alignment.centerRight,
-                                      child: TextButton(
-                                        onPressed: _clearCompleted,
-                                        child: Text(l10n.todoClearCompleted),
-                                      ),
-                                    ),
-                                  ),
-                              ],
-                            ),
-                            if (_showCompleted) ...<Widget>[
-                              const SizedBox(height: 8),
-                              ...completed.map((Reminder reminder) {
-                                return Padding(
-                                  padding: const EdgeInsets.only(bottom: 10),
-                                  child: Slidable(
-                                    key: ValueKey<String>('todo_done_${reminder.id}'),
-                                    endActionPane: ActionPane(
-                                      motion: const DrawerMotion(),
-                                      extentRatio: 0.14,
-                                      children: <Widget>[
-                                        AppSlidableActionButton(
-                                          onPressed: () => _deleteTodo(reminder),
-                                          icon: Icons.delete_outline,
-                                          iconColor: AppTheme.destructiveColor,
-                                          backgroundColor: AppTheme.destructiveColor
-                                              .withValues(alpha: 0.16),
-                                        ),
-                                      ],
-                                    ),
-                                    child: _TodoCard(
-                                      reminder: reminder,
-                                      showCreatedDate: showTodoCreatedDate,
-                                      calendarScheduleLabel:
-                                          _calendarScheduleLabel(reminder, reminderNotifier),
-                                      onTitleCommitted: (String title) =>
-                                          _commitTodoTitle(reminder, title),
-                                      onCheckChanged: (bool? checked) =>
-                                          _toggleComplete(reminder, checked),
-                                    ),
-                                  ),
-                                );
-                              }),
-                            ],
-                          ],
-                        ],
+                    : CustomScrollView(
+                        slivers: _buildTodoListSlivers(
+                          context: context,
+                          l10n: l10n,
+                          reminderNotifier: reminderNotifier,
+                          showTodoCreatedDate: showTodoCreatedDate,
+                          pendingDeadline: pendingDeadline,
+                          pendingNormal: pendingNormal,
+                          completed: completed,
+                          deadlineHeaderColor: deadlineHeaderColor,
+                          normalHeaderColor: normalHeaderColor,
+                        ),
                       ),
               ),
             ],
@@ -671,6 +410,491 @@ class _TodoPageState extends ConsumerState<TodoPage> {
         ),
       ),
     );
+  }
+
+  double _expandedSectionHeaderExtent(BuildContext context) {
+    final double textScale = MediaQuery.textScalerOf(context).scale(12) / 12;
+    return 40 * textScale + 12;
+  }
+
+  double _collapsedSectionHeaderExtent(BuildContext context) {
+    final double textScale = MediaQuery.textScalerOf(context).scale(15) / 15;
+    return 46 * textScale + 10;
+  }
+
+  double _expandedCompletedSectionHeaderExtent(BuildContext context) {
+    final double textScale = MediaQuery.textScalerOf(context).scale(12) / 12;
+    return _expandedSectionHeaderExtent(context) + 18 * textScale;
+  }
+
+  List<Widget> _buildTodoListSlivers({
+    required BuildContext context,
+    required AppLocalizations l10n,
+    required ReminderNotifier reminderNotifier,
+    required bool showTodoCreatedDate,
+    required List<Reminder> pendingDeadline,
+    required List<Reminder> pendingNormal,
+    required List<Reminder> completed,
+    required Color deadlineHeaderColor,
+    required Color normalHeaderColor,
+  }) {
+    final List<Widget> slivers = <Widget>[
+      SliverMainAxisGroup(
+        slivers: <Widget>[
+          _pinnedSectionHeader(
+            extent: _showDeadlineTodos
+                ? _expandedSectionHeaderExtent(context)
+                : _collapsedSectionHeaderExtent(context),
+            child: _buildDeadlineSectionHeader(
+              context: context,
+              l10n: l10n,
+              deadlineHeaderColor: deadlineHeaderColor,
+              count: pendingDeadline.length,
+            ),
+          ),
+          if (_showDeadlineTodos && pendingDeadline.isNotEmpty)
+            SliverList(
+              delegate: SliverChildBuilderDelegate(
+                (BuildContext context, int index) => _buildPendingTodoItem(
+                  pendingDeadline[index],
+                  reminderNotifier,
+                  showCreatedDate: showTodoCreatedDate,
+                ),
+                childCount: pendingDeadline.length,
+              ),
+            ),
+        ],
+      ),
+      SliverMainAxisGroup(
+        slivers: <Widget>[
+          _pinnedSectionHeader(
+            extent: _showNormalTodos
+                ? _expandedSectionHeaderExtent(context)
+                : _collapsedSectionHeaderExtent(context),
+            child: _buildNormalSectionHeader(
+              context: context,
+              l10n: l10n,
+              normalHeaderColor: normalHeaderColor,
+              count: pendingNormal.length,
+            ),
+          ),
+          if (_showNormalTodos && pendingNormal.isNotEmpty)
+            SliverList(
+              delegate: SliverChildBuilderDelegate(
+                (BuildContext context, int index) => _buildPendingTodoItem(
+                  pendingNormal[index],
+                  reminderNotifier,
+                  showCreatedDate: showTodoCreatedDate,
+                ),
+                childCount: pendingNormal.length,
+              ),
+            ),
+          const SliverToBoxAdapter(child: SizedBox(height: 6)),
+        ],
+      ),
+    ];
+
+    if (completed.isNotEmpty) {
+      slivers.add(
+        SliverMainAxisGroup(
+          slivers: <Widget>[
+            const SliverToBoxAdapter(child: SizedBox(height: 12)),
+            _pinnedSectionHeader(
+              extent: _showCompleted
+                  ? _expandedCompletedSectionHeaderExtent(context)
+                  : _collapsedSectionHeaderExtent(context),
+              child: _buildCompletedSectionHeader(
+                context: context,
+                l10n: l10n,
+                count: completed.length,
+              ),
+            ),
+            if (_showCompleted)
+              SliverList(
+                delegate: SliverChildBuilderDelegate(
+                  (BuildContext context, int index) {
+                    final Reminder reminder = completed[index];
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: Slidable(
+                        key: ValueKey<String>('todo_done_${reminder.id}'),
+                        endActionPane: ActionPane(
+                          motion: const DrawerMotion(),
+                          extentRatio: 0.14,
+                          children: <Widget>[
+                            AppSlidableActionButton(
+                              onPressed: () => _deleteTodo(reminder),
+                              icon: Icons.delete_outline,
+                              iconColor: AppTheme.destructiveColor,
+                              backgroundColor:
+                                  AppTheme.destructiveColor.withValues(alpha: 0.16),
+                            ),
+                          ],
+                        ),
+                        child: _TodoCard(
+                          reminder: reminder,
+                          showCreatedDate: showTodoCreatedDate,
+                          calendarScheduleLabel:
+                              _calendarScheduleLabel(reminder, reminderNotifier),
+                          onTitleCommitted: (String title) =>
+                              _commitTodoTitle(reminder, title),
+                          onCheckChanged: (bool? checked) =>
+                              _toggleComplete(reminder, checked),
+                        ),
+                      ),
+                    );
+                  },
+                  childCount: completed.length,
+                ),
+              ),
+          ],
+        ),
+      );
+    }
+
+    slivers.add(const SliverToBoxAdapter(child: SizedBox(height: 20)));
+    return slivers;
+  }
+
+  Widget _pinnedSectionHeader({
+    required double extent,
+    required Widget child,
+  }) {
+    return SliverPersistentHeader(
+      pinned: true,
+      delegate: _TodoPinnedSectionHeaderDelegate(
+        extent: extent,
+        child: child,
+      ),
+    );
+  }
+
+  Widget _buildDeadlineSectionHeader({
+    required BuildContext context,
+    required AppLocalizations l10n,
+    required Color deadlineHeaderColor,
+    required int count,
+  }) {
+    if (_showDeadlineTodos) {
+      return Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: () {
+            setState(() => _showDeadlineTodos = !_showDeadlineTodos);
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+            child: Row(
+              children: <Widget>[
+                Icon(
+                  Icons.keyboard_arrow_down,
+                  size: 20,
+                  color: deadlineHeaderColor,
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    l10n.todoDeadlineSection,
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: deadlineHeaderColor,
+                          fontWeight: FontWeight.w600,
+                        ),
+                  ),
+                ),
+                Text(
+                  '$count',
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: deadlineHeaderColor,
+                      ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return AppGroupedSection(
+      children: <Widget>[
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () {
+              setState(() => _showDeadlineTodos = !_showDeadlineTodos);
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              child: Row(
+                children: <Widget>[
+                  Icon(
+                    Icons.keyboard_arrow_right,
+                    size: 22,
+                    color: deadlineHeaderColor,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      l10n.todoDeadlineSection,
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            color: deadlineHeaderColor,
+                          ),
+                    ),
+                  ),
+                  Text(
+                    '$count',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: deadlineHeaderColor,
+                        ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildNormalSectionHeader({
+    required BuildContext context,
+    required AppLocalizations l10n,
+    required Color normalHeaderColor,
+    required int count,
+  }) {
+    if (_showNormalTodos) {
+      return Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: () {
+            setState(() => _showNormalTodos = !_showNormalTodos);
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+            child: Row(
+              children: <Widget>[
+                Icon(
+                  Icons.keyboard_arrow_down,
+                  size: 20,
+                  color: normalHeaderColor,
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    l10n.todoNormalSection,
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: normalHeaderColor,
+                          fontWeight: FontWeight.w600,
+                        ),
+                  ),
+                ),
+                Text(
+                  '$count',
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: normalHeaderColor,
+                      ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return AppGroupedSection(
+      children: <Widget>[
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () {
+              setState(() => _showNormalTodos = !_showNormalTodos);
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              child: Row(
+                children: <Widget>[
+                  Icon(
+                    Icons.keyboard_arrow_right,
+                    size: 22,
+                    color: normalHeaderColor,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      l10n.todoNormalSection,
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            color: normalHeaderColor,
+                          ),
+                    ),
+                  ),
+                  Text(
+                    '$count',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: normalHeaderColor,
+                        ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCompletedSectionHeader({
+    required BuildContext context,
+    required AppLocalizations l10n,
+    required int count,
+  }) {
+    const Color headerColor = AppTheme.secondaryLabelColor;
+
+    if (_showCompleted) {
+      final TextStyle? labelStyle = Theme.of(context).textTheme.labelSmall?.copyWith(
+            color: headerColor,
+            fontWeight: FontWeight.w600,
+          );
+      final TextStyle? clearStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: AppTheme.primaryColor,
+            fontWeight: FontWeight.w600,
+          );
+
+      return Material(
+        color: Colors.transparent,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Expanded(
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(10),
+                  onTap: () {
+                    setState(() => _showCompleted = !_showCompleted);
+                  },
+                  child: Row(
+                    children: <Widget>[
+                      Icon(
+                        Icons.keyboard_arrow_down,
+                        size: 20,
+                        color: headerColor,
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          l10n.todoCompletedSection,
+                          style: labelStyle,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: <Widget>[
+                  InkWell(
+                    onTap: () {
+                      setState(() => _showCompleted = !_showCompleted);
+                    },
+                    child: Text(
+                      '$count',
+                      style: labelStyle,
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () => _onClearCompletedPressed(count),
+                    style: TextButton.styleFrom(
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      padding: EdgeInsets.zero,
+                      foregroundColor: AppTheme.primaryColor,
+                      textStyle: clearStyle,
+                    ),
+                    child: Text(l10n.todoClearCompleted),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return AppGroupedSection(
+      children: <Widget>[
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () {
+              setState(() => _showCompleted = !_showCompleted);
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              child: Row(
+                children: <Widget>[
+                  const Icon(
+                    Icons.keyboard_arrow_right,
+                    size: 22,
+                    color: headerColor,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      l10n.todoCompletedSection,
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                  ),
+                  Text(
+                    '$count',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _TodoPinnedSectionHeaderDelegate extends SliverPersistentHeaderDelegate {
+  const _TodoPinnedSectionHeaderDelegate({
+    required this.extent,
+    required this.child,
+  });
+
+  final double extent;
+  final Widget child;
+
+  @override
+  double get minExtent => extent;
+
+  @override
+  double get maxExtent => extent;
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+    return ColoredBox(
+      color: AppTheme.groupedBackgroundColor,
+      child: SizedBox(
+        height: extent,
+        width: double.infinity,
+        child: ClipRect(
+          child: Align(
+            alignment: Alignment.topCenter,
+            child: child,
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  bool shouldRebuild(covariant _TodoPinnedSectionHeaderDelegate oldDelegate) {
+    return true;
   }
 }
 
