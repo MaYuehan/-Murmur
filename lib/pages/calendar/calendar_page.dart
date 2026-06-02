@@ -272,7 +272,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
         ],
       ),
       body: SafeArea(
-        child: SingleChildScrollView(
+        child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: AppTheme.pagePadding),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -283,21 +283,25 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
                   AppSegmentOption(value: _CalendarViewMode.week, label: l10n.calendarViewWeek),
                 ],
                 selected: _viewMode,
-                onChanged: ( _CalendarViewMode mode) {
+                onChanged: (_CalendarViewMode mode) {
                   setState(() => _viewMode = mode);
                 },
               ),
               const SizedBox(height: 12),
-              if (_viewMode == _CalendarViewMode.month)
-                _buildMonthCalendar(reminderNotifier)
-              else
-                _buildWeekStrip(reminderNotifier),
-              const SizedBox(height: 12),
-              if (_viewMode == _CalendarViewMode.month)
-                _buildDayAgenda(reminderNotifier)
-              else
-                _buildWeekAgenda(reminderNotifier),
-              const SizedBox(height: 16),
+              Expanded(
+                child: CustomScrollView(
+                  slivers: <Widget>[
+                    SliverToBoxAdapter(
+                      child: _viewMode == _CalendarViewMode.month
+                          ? _buildMonthCalendar(reminderNotifier)
+                          : _buildWeekStrip(reminderNotifier),
+                    ),
+                    const SliverToBoxAdapter(child: SizedBox(height: 12)),
+                    ..._buildAgendaSlivers(reminderNotifier),
+                    const SliverToBoxAdapter(child: SizedBox(height: 16)),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
@@ -587,7 +591,153 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
     );
   }
 
-  Widget _buildReminderList(List<Reminder> reminders) {
+  SliverPersistentHeader _pinnedAgendaDateHeader(String title) {
+    return SliverPersistentHeader(
+      pinned: true,
+      delegate: _PinnedAgendaDateHeaderDelegate(title: title),
+    );
+  }
+
+  List<Widget> _buildAgendaSlivers(ReminderNotifier notifier) {
+    if (_viewMode == _CalendarViewMode.month) {
+      return _buildMonthDayAgendaSlivers(notifier);
+    }
+    return _buildWeekAgendaSlivers(notifier);
+  }
+
+  List<Widget> _buildMonthDayAgendaSlivers(ReminderNotifier notifier) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    final List<Reminder> reminders =
+        notifier.getFixedRemindersByDay(_selectedDay);
+    final String dateTitle = DateTimeUtils.formatDate(_selectedDay);
+
+    return <Widget>[
+      _pinnedAgendaDateHeader(dateTitle),
+      if (reminders.isEmpty)
+        SliverToBoxAdapter(
+          child: AppEmptyState(
+            icon: Icons.event_available_outlined,
+            title: l10n.calendarEmptyDayTitle,
+            subtitle: l10n.calendarEmptyDaySubtitle,
+          ),
+        )
+      else
+        _buildReminderListSliver(reminders),
+    ];
+  }
+
+  List<Widget> _buildWeekAgendaSlivers(ReminderNotifier notifier) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+
+    return <Widget>[
+      SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
+          child: Row(
+            children: <Widget>[
+              if (_weekAgendaScope == _WeekAgendaScope.week)
+                Expanded(
+                  child: Text(
+                    l10n.calendarWeekAgendaTitle,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                  ),
+                )
+              else
+                const Spacer(),
+              SizedBox(
+                width: 128,
+                child: AppSegmentedControl<_WeekAgendaScope>(
+                  compact: true,
+                  options: <AppSegmentOption<_WeekAgendaScope>>[
+                    AppSegmentOption(
+                      value: _WeekAgendaScope.week,
+                      label: l10n.calendarScopeThisWeek,
+                    ),
+                    AppSegmentOption(
+                      value: _WeekAgendaScope.day,
+                      label: l10n.calendarScopeSelectedDay,
+                    ),
+                  ],
+                  selected: _weekAgendaScope,
+                  onChanged: (_WeekAgendaScope scope) {
+                    setState(() => _weekAgendaScope = scope);
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      if (_weekAgendaScope == _WeekAgendaScope.day)
+        ..._buildSelectedDayAgendaSlivers(notifier)
+      else
+        ..._buildWeekAgendaContentSlivers(notifier),
+    ];
+  }
+
+  List<Widget> _buildSelectedDayAgendaSlivers(ReminderNotifier notifier) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    final List<Reminder> reminders =
+        notifier.getFixedRemindersByDay(_selectedDay);
+    final String dateTitle = DateTimeUtils.formatDate(_selectedDay);
+
+    return <Widget>[
+      _pinnedAgendaDateHeader(dateTitle),
+      if (reminders.isEmpty)
+        SliverToBoxAdapter(
+          child: AppEmptyState(
+            icon: Icons.event_available_outlined,
+            title: l10n.calendarEmptyDayNamedTitle(dateTitle),
+            subtitle: l10n.calendarEmptyDaySubtitle,
+          ),
+        )
+      else
+        _buildReminderListSliver(reminders),
+    ];
+  }
+
+  List<Widget> _buildWeekAgendaContentSlivers(ReminderNotifier notifier) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    final List<DateTime> weekDays = DateTimeUtils.daysInWeek(_selectedDay);
+    final List<Widget> slivers = <Widget>[];
+    var hasAnyReminders = false;
+
+    for (final DateTime day in weekDays) {
+      final List<Reminder> reminders = notifier.getFixedRemindersByDay(day);
+      if (reminders.isEmpty) {
+        continue;
+      }
+      hasAnyReminders = true;
+      final String dateTitle =
+          '${DateTimeUtils.weekdayLabel(day.weekday)} ${DateTimeUtils.formatDate(day)}';
+      slivers.add(
+        SliverMainAxisGroup(
+          slivers: <Widget>[
+            _pinnedAgendaDateHeader(dateTitle),
+            _buildReminderListSliver(reminders),
+          ],
+        ),
+      );
+    }
+
+    if (!hasAnyReminders) {
+      slivers.add(
+        SliverToBoxAdapter(
+          child: AppEmptyState(
+            icon: Icons.date_range_outlined,
+            title: l10n.calendarEmptyWeekTitle,
+            subtitle: l10n.calendarEmptyWeekSubtitle,
+          ),
+        ),
+      );
+    }
+
+    return slivers;
+  }
+
+  List<Widget> _collectReminderListChildren(List<Reminder> reminders) {
     final List<Reminder> deadlineReminders = reminders
         .where((Reminder reminder) => reminder.isTodoDeadline)
         .toList();
@@ -661,137 +811,16 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
       );
     }
 
-    return ListView(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      children: items,
-    );
+    return items;
   }
 
-  Widget _buildDayAgenda(ReminderNotifier notifier) {
-    final AppLocalizations l10n = AppLocalizations.of(context);
-    final List<Reminder> reminders =
-        notifier.getFixedRemindersByDay(_selectedDay);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        AppSectionHeader(title: DateTimeUtils.formatDate(_selectedDay)),
-        if (reminders.isEmpty)
-          AppEmptyState(
-            icon: Icons.event_available_outlined,
-            title: l10n.calendarEmptyDayTitle,
-            subtitle: l10n.calendarEmptyDaySubtitle,
-          )
-        else
-          _buildReminderList(reminders),
-      ],
-    );
-  }
-
-  Widget _buildWeekAgenda(ReminderNotifier notifier) {
-    final AppLocalizations l10n = AppLocalizations.of(context);
-    final String agendaTitle = _weekAgendaScope == _WeekAgendaScope.week
-        ? l10n.calendarWeekAgendaTitle
-        : DateTimeUtils.formatDate(_selectedDay);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Padding(
-          padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
-          child: Row(
-            children: <Widget>[
-              Expanded(
-                child: Text(
-                  agendaTitle,
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                ),
-              ),
-              SizedBox(
-                width: 128,
-                child: AppSegmentedControl<_WeekAgendaScope>(
-                  compact: true,
-                  options: <AppSegmentOption<_WeekAgendaScope>>[
-                    AppSegmentOption(value: _WeekAgendaScope.week, label: l10n.calendarScopeThisWeek),
-                    AppSegmentOption(value: _WeekAgendaScope.day, label: l10n.calendarScopeSelectedDay),
-                  ],
-                  selected: _weekAgendaScope,
-                  onChanged: ( _WeekAgendaScope scope) {
-                    setState(() => _weekAgendaScope = scope);
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
-        if (_weekAgendaScope == _WeekAgendaScope.day)
-          _buildSelectedDayAgendaContent(notifier)
-        else
-          _buildWeekAgendaContent(notifier),
-      ],
-    );
-  }
-
-  Widget _buildSelectedDayAgendaContent(ReminderNotifier notifier) {
-    final AppLocalizations l10n = AppLocalizations.of(context);
-    final List<Reminder> reminders =
-        notifier.getFixedRemindersByDay(_selectedDay);
-
-    if (reminders.isEmpty) {
-      return AppEmptyState(
-        icon: Icons.event_available_outlined,
-        title: l10n.calendarEmptyDayNamedTitle(DateTimeUtils.formatDate(_selectedDay)),
-        subtitle: l10n.calendarEmptyDaySubtitle,
-      );
-    }
-
-    return _buildReminderList(reminders);
-  }
-
-  Widget _buildWeekAgendaContent(ReminderNotifier notifier) {
-    final AppLocalizations l10n = AppLocalizations.of(context);
-    final List<DateTime> weekDays = DateTimeUtils.daysInWeek(_selectedDay);
-
-    final List<Widget> sections = <Widget>[];
-    for (final DateTime day in weekDays) {
-      final List<Reminder> reminders = notifier.getFixedRemindersByDay(day);
-      if (reminders.isEmpty) {
-        continue;
-      }
-      sections.add(
-        Padding(
-          padding: const EdgeInsets.only(bottom: 8, top: 4),
-          child: Text(
-            '${DateTimeUtils.weekdayLabel(day.weekday)} ${DateTimeUtils.formatDate(day)}',
-            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
-          ),
-        ),
-      );
-      sections.add(
-        _buildReminderList(reminders),
-      );
-      if (day != weekDays.last) {
-        sections.add(const SizedBox(height: 2));
-      }
-    }
-
-    if (sections.isEmpty) {
-      return AppEmptyState(
-        icon: Icons.date_range_outlined,
-        title: l10n.calendarEmptyWeekTitle,
-        subtitle: l10n.calendarEmptyWeekSubtitle,
-      );
-    }
-
-    return ListView(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      children: sections,
+  Widget _buildReminderListSliver(List<Reminder> reminders) {
+    final List<Widget> items = _collectReminderListChildren(reminders);
+    return SliverList(
+      delegate: SliverChildBuilderDelegate(
+        (BuildContext context, int index) => items[index],
+        childCount: items.length,
+      ),
     );
   }
 
@@ -826,5 +855,42 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
       }
       _openReminderDetail(reminder);
     });
+  }
+}
+
+class _PinnedAgendaDateHeaderDelegate extends SliverPersistentHeaderDelegate {
+  const _PinnedAgendaDateHeaderDelegate({required this.title});
+
+  final String title;
+  static const double _extent = 36;
+
+  @override
+  double get minExtent => _extent;
+
+  @override
+  double get maxExtent => _extent;
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+    return ColoredBox(
+      color: AppTheme.groupedBackgroundColor,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(4, 4, 4, 8),
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: Text(
+            title,
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  bool shouldRebuild(covariant _PinnedAgendaDateHeaderDelegate oldDelegate) {
+    return oldDelegate.title != title;
   }
 }
