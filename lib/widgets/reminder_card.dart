@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:murmur/core/theme/app_theme.dart';
 import 'package:murmur/core/utils/date_time_utils.dart';
+import 'package:murmur/core/utils/reminder_time_rules.dart';
 import 'package:murmur/l10n/app_localizations.dart';
 import 'package:murmur/models/reminder.dart';
 
@@ -163,21 +164,34 @@ class ReminderCard extends StatelessWidget {
                         ),
                       ),
                     ],
-                    if (reminder.remindEnabled && reminder.voiceRemindEnabled) ...<Widget>[
-                      const SizedBox(height: 6),
+                    if (reminder.remindEnabled) ...<Widget>[
+                      const SizedBox(height: 4),
                       Row(
                         children: <Widget>[
                           Icon(
-                            Icons.graphic_eq_rounded,
-                            size: 14,
+                            Icons.notifications_outlined,
+                            size: 13,
                             color: scheme.primary,
                           ),
+                          if (reminder.voiceRemindEnabled) ...<Widget>[
+                            const SizedBox(width: 4),
+                            Icon(
+                              Icons.graphic_eq_rounded,
+                              size: 13,
+                              color: scheme.primary,
+                            ),
+                          ],
                           const SizedBox(width: 4),
                           Text(
-                            l10n.reminderVoiceRemindBadge,
+                            reminder.remindAt != null
+                                ? ReminderTimeRules.remindPreviewLabel(
+                                    remindAt: reminder.remindAt,
+                                    frequency: reminder.remindFrequency,
+                                    repeatDays: reminder.remindRepeatDays,
+                                  )
+                                : l10n.todoReminderSet,
                             style: textTheme.labelSmall?.copyWith(
-                              color: scheme.primary,
-                              fontWeight: FontWeight.w600,
+                              color: AppTheme.secondaryLabelColor,
                             ),
                           ),
                         ],

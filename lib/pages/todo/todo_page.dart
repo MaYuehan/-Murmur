@@ -209,47 +209,9 @@ class _TodoPageState extends ConsumerState<TodoPage> {
     );
   }
 
-  Future<void> _showInlineTitleEdit(Reminder reminder) async {
-    final TextEditingController controller = TextEditingController(text: reminder.title);
-    final String? text = await showModalBottomSheet<String>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (BuildContext sheetContext) {
-        final AppLocalizations l10n = AppLocalizations.of(context);
-        final MediaQueryData mediaQuery = MediaQuery.of(sheetContext);
-        return SingleChildScrollView(
-          child: Padding(
-            padding: EdgeInsets.only(
-              left: 16,
-              right: 16,
-              top: 10,
-              bottom: mediaQuery.viewInsets.bottom + 16,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                TextField(
-                  controller: controller,
-                  autofocus: true,
-                  decoration: InputDecoration(labelText: l10n.todoEditTitleLabel),
-                ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton(
-                    onPressed: () => Navigator.of(sheetContext).pop(controller.text.trim()),
-                    child: Text(l10n.commonSave),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-    final String value = (text ?? '').trim();
-    if (value.isEmpty) {
+  Future<void> _commitTodoTitle(Reminder reminder, String title) async {
+    final String value = title.trim();
+    if (value.isEmpty || value == reminder.title) {
       return;
     }
     await ref.read(reminderListProvider.notifier).updateReminder(
@@ -337,7 +299,7 @@ class _TodoPageState extends ConsumerState<TodoPage> {
           reminder: reminder,
           showCreatedDate: showCreatedDate,
           calendarScheduleLabel: _calendarScheduleLabel(reminder, reminderNotifier),
-          onTapText: () => _showInlineTitleEdit(reminder),
+          onTitleCommitted: (String title) => _commitTodoTitle(reminder, title),
           onCheckChanged: (bool? checked) => _toggleComplete(reminder, checked),
         ),
       ),
@@ -691,7 +653,8 @@ class _TodoPageState extends ConsumerState<TodoPage> {
                                       showCreatedDate: showTodoCreatedDate,
                                       calendarScheduleLabel:
                                           _calendarScheduleLabel(reminder, reminderNotifier),
-                                      onTapText: () => _showInlineTitleEdit(reminder),
+                                      onTitleCommitted: (String title) =>
+                                          _commitTodoTitle(reminder, title),
                                       onCheckChanged: (bool? checked) =>
                                           _toggleComplete(reminder, checked),
                                     ),
@@ -711,27 +674,109 @@ class _TodoPageState extends ConsumerState<TodoPage> {
   }
 }
 
-class _TodoCard extends StatelessWidget {
+class _TodoCard extends StatefulWidget {
   const _TodoCard({
     required this.reminder,
     required this.showCreatedDate,
     this.calendarScheduleLabel,
-    this.onTapText,
+    this.onTitleCommitted,
     this.onCheckChanged,
   });
 
   final Reminder reminder;
   final bool showCreatedDate;
   final String? calendarScheduleLabel;
-  final VoidCallback? onTapText;
+  final ValueChanged<String>? onTitleCommitted;
   final ValueChanged<bool?>? onCheckChanged;
+
+  @override
+  State<_TodoCard> createState() => _TodoCardState();
+}
+
+class _TodoCardState extends State<_TodoCard> {
+  late final TextEditingController _titleController;
+  late final FocusNode _titleFocusNode;
+  bool _editingTitle = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _titleController = TextEditingController(text: widget.reminder.title);
+    _titleFocusNode = FocusNode();
+    _titleFocusNode.addListener(_onTitleFocusChange);
+  }
+
+  @override
+  void didUpdateWidget(covariant _TodoCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!_editingTitle && oldWidget.reminder.title != widget.reminder.title) {
+      _titleController.text = widget.reminder.title;
+    }
+  }
+
+  @override
+  void dispose() {
+    _titleFocusNode.removeListener(_onTitleFocusChange);
+    _titleFocusNode.dispose();
+    _titleController.dispose();
+    super.dispose();
+  }
+
+  void _onTitleFocusChange() {
+    if (!_titleFocusNode.hasFocus && _editingTitle) {
+      _commitTitleEdit();
+    }
+  }
+
+  void _startTitleEdit() {
+    if (_editingTitle) {
+      return;
+    }
+    _titleController.text = widget.reminder.title;
+    setState(() => _editingTitle = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      _titleFocusNode.requestFocus();
+      _titleController.selection = TextSelection(
+        baseOffset: 0,
+        extentOffset: _titleController.text.length,
+      );
+    });
+  }
+
+  void _commitTitleEdit() {
+    if (!_editingTitle) {
+      return;
+    }
+    final String value = _titleController.text.trim();
+    if (value.isEmpty) {
+      _titleController.text = widget.reminder.title;
+    } else if (value != widget.reminder.title) {
+      widget.onTitleCommitted?.call(value);
+    }
+    setState(() => _editingTitle = false);
+    _titleFocusNode.unfocus();
+  }
+
+  TextStyle? _titleTextStyle(BuildContext context) {
+    final Color textColor = widget.reminder.isCompleted
+        ? AppTheme.secondaryLabelColor
+        : AppTheme.textPrimaryColor;
+    return Theme.of(context).textTheme.titleMedium?.copyWith(
+          color: textColor,
+          decoration:
+              widget.reminder.isCompleted ? TextDecoration.lineThrough : TextDecoration.none,
+          height: 1.3,
+        );
+  }
 
   @override
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context);
-    final Color textColor = reminder.isCompleted
-        ? AppTheme.secondaryLabelColor
-        : AppTheme.textPrimaryColor;
+    final Reminder reminder = widget.reminder;
+    final TextStyle? titleStyle = _titleTextStyle(context);
 
     return Container(
       decoration: BoxDecoration(
@@ -753,33 +798,52 @@ class _TodoCard extends StatelessWidget {
               children: <Widget>[
                 Checkbox(
                   value: reminder.isCompleted,
-                  onChanged: onCheckChanged,
+                  onChanged: widget.onCheckChanged,
                   materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   visualDensity: VisualDensity.compact,
                 ),
                 Expanded(
-                  child: GestureDetector(
-                    onTap: onTapText,
-                    behavior: HitTestBehavior.opaque,
-                    child: Padding(
-                      padding: const EdgeInsets.only(top: 10, bottom: 10),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          Text(
-                            reminder.title,
-                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                  color: textColor,
-                                  decoration: reminder.isCompleted
-                                      ? TextDecoration.lineThrough
-                                      : TextDecoration.none,
-                                  height: 1.3,
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 10, bottom: 10),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        _editingTitle
+                            ? TextField(
+                                controller: _titleController,
+                                focusNode: _titleFocusNode,
+                                style: titleStyle,
+                                decoration: const InputDecoration(
+                                  isDense: true,
+                                  border: InputBorder.none,
+                                  contentPadding: EdgeInsets.zero,
                                 ),
-                          ),
-                          if (reminder.hasDeadline) ...<Widget>[
+                                maxLines: null,
+                                textInputAction: TextInputAction.done,
+                                onSubmitted: (_) => _commitTitleEdit(),
+                              )
+                            : GestureDetector(
+                                onTap: _startTitleEdit,
+                                behavior: HitTestBehavior.opaque,
+                                child: Text(
+                                  reminder.title,
+                                  style: titleStyle,
+                                ),
+                              ),
+                        if (reminder.hasDeadline) ...<Widget>[
                             const SizedBox(height: 4),
                             Row(
                               children: <Widget>[
+                                if (reminder.isSyncedToCalendar) ...<Widget>[
+                                  Icon(
+                                    Icons.calendar_today_outlined,
+                                    size: 12,
+                                    color: reminder.isCompleted
+                                        ? AppTheme.secondaryLabelColor
+                                        : AppTheme.primaryColor,
+                                  ),
+                                  const SizedBox(width: 4),
+                                ],
                                 Icon(
                                   Icons.flag_outlined,
                                   size: 13,
@@ -802,14 +866,6 @@ class _TodoCard extends StatelessWidget {
                                             : TextDecoration.none,
                                       ),
                                 ),
-                                if (reminder.isSyncedToCalendar) ...<Widget>[
-                                  const SizedBox(width: 6),
-                                  Icon(
-                                    Icons.calendar_today_outlined,
-                                    size: 12,
-                                    color: AppTheme.secondaryLabelColor,
-                                  ),
-                                ],
                               ],
                             ),
                           ],
@@ -820,14 +876,18 @@ class _TodoCard extends StatelessWidget {
                                 Icon(
                                   Icons.calendar_today_outlined,
                                   size: 12,
-                                  color: AppTheme.secondaryLabelColor,
+                                  color: reminder.isCompleted
+                                      ? AppTheme.secondaryLabelColor
+                                      : AppTheme.primaryColor,
                                 ),
-                                if (calendarScheduleLabel != null) ...<Widget>[
+                                if (widget.calendarScheduleLabel != null) ...<Widget>[
                                   const SizedBox(width: 4),
                                   Text(
-                                    calendarScheduleLabel!,
+                                    widget.calendarScheduleLabel!,
                                     style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                          color: AppTheme.secondaryLabelColor,
+                                          color: reminder.isCompleted
+                                              ? AppTheme.secondaryLabelColor
+                                              : AppTheme.primaryColor,
                                         ),
                                   ),
                                 ],
@@ -843,6 +903,14 @@ class _TodoCard extends StatelessWidget {
                                   size: 13,
                                   color: Theme.of(context).colorScheme.primary,
                                 ),
+                                if (reminder.voiceRemindEnabled) ...<Widget>[
+                                  const SizedBox(width: 4),
+                                  Icon(
+                                    Icons.graphic_eq_rounded,
+                                    size: 13,
+                                    color: Theme.of(context).colorScheme.primary,
+                                  ),
+                                ],
                                 const SizedBox(width: 4),
                                 Text(
                                   reminder.remindAt != null
@@ -853,21 +921,20 @@ class _TodoCard extends StatelessWidget {
                                         )
                                       : l10n.todoReminderSet,
                                   style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                        color: Theme.of(context).colorScheme.primary,
+                                        color: AppTheme.secondaryLabelColor,
                                       ),
                                 ),
                               ],
                             ),
                           ],
-                          if (showCreatedDate) ...<Widget>[
-                            const SizedBox(height: 2),
-                            Text(
-                              l10n.todoCreatedAt(DateTimeUtils.formatDate(reminder.createdAt)),
-                              style: Theme.of(context).textTheme.labelSmall,
-                            ),
-                          ],
+                        if (widget.showCreatedDate) ...<Widget>[
+                          const SizedBox(height: 2),
+                          Text(
+                            l10n.todoCreatedAt(DateTimeUtils.formatDate(reminder.createdAt)),
+                            style: Theme.of(context).textTheme.labelSmall,
+                          ),
                         ],
-                      ),
+                      ],
                     ),
                   ),
                 ),

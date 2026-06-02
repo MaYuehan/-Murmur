@@ -81,6 +81,8 @@ class AppLocalizations {
   String get calendarPrevWeek => _t('上一周', 'Previous week');
   String get calendarNextWeek => _t('下一周', 'Next week');
   String get calendarBackToCurrentWeek => _t('回到本周', 'This week');
+  String get calendarPickMonthYear => _t('选择年月', 'Select month');
+  String get calendarPickWeek => _t('选择周', 'Select week');
   String get calendarEmptyDayTitle => _t('当天暂无日程', 'No events today');
   String get calendarEmptyDaySubtitle =>
       _t('点击右上角「新建」添加', 'Tap “New” at top right to add');

@@ -1,4 +1,6 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:murmur/core/theme/app_theme.dart';
@@ -8,6 +10,7 @@ import 'package:murmur/models/reminder.dart';
 import 'package:murmur/pages/calendar/reminder_detail_page.dart';
 import 'package:murmur/providers/notification_navigation_provider.dart';
 import 'package:murmur/providers/reminder_provider.dart';
+import 'package:murmur/widgets/app_date_picker.dart';
 import 'package:murmur/widgets/app_slidable_action_button.dart';
 import 'package:murmur/widgets/app_ui.dart';
 import 'package:murmur/widgets/create_reminder_sheet.dart';
@@ -26,6 +29,9 @@ class CalendarPage extends ConsumerStatefulWidget {
 }
 
 class _CalendarPageState extends ConsumerState<CalendarPage> {
+  static final DateTime _calendarFirstDay = DateTime(2020, 1, 1);
+  static final DateTime _calendarLastDay = DateTime(2035, 12, 31);
+
   DateTime _focusedDay = DateTime.now();
   DateTime _selectedDay = DateTime.now();
   String? _highlightedReminderId;
@@ -155,6 +161,96 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
     return DateTimeUtils.startOfWeek(day) == DateTimeUtils.startOfWeek(today);
   }
 
+  String _formatMonthYearHeader(DateTime day) {
+    final String localeName = Localizations.localeOf(context).toString();
+    return DateFormat.yMMMM(localeName).format(day);
+  }
+
+  void _shiftMonth(int monthDelta) {
+    setState(() {
+      final DateTime anchor = DateTime(_focusedDay.year, _focusedDay.month + monthDelta, 1);
+      final int maxDay = DateTime(anchor.year, anchor.month + 1, 0).day;
+      final int day = _selectedDay.day <= maxDay ? _selectedDay.day : maxDay;
+      _focusedDay = DateTime(anchor.year, anchor.month, day);
+      _selectedDay = _focusedDay;
+    });
+  }
+
+  void _applyMonthYear(DateTime monthYear) {
+    final int year = monthYear.year;
+    final int month = monthYear.month;
+    final int maxDay = DateTime(year, month + 1, 0).day;
+    final int day = _selectedDay.day <= maxDay ? _selectedDay.day : maxDay;
+    setState(() {
+      _focusedDay = DateTime(year, month, day);
+      _selectedDay = _focusedDay;
+    });
+  }
+
+  Future<void> _pickMonthYear(BuildContext anchorContext) async {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    final DateTime? picked = await showAppCupertinoWheelPicker(
+      context: context,
+      anchorContext: anchorContext,
+      title: l10n.calendarPickMonthYear,
+      initialDateTime: _focusedDay,
+      minimumDate: _calendarFirstDay,
+      maximumDate: _calendarLastDay,
+      mode: CupertinoDatePickerMode.monthYear,
+    );
+    if (picked == null || !mounted) {
+      return;
+    }
+    _applyMonthYear(picked);
+  }
+
+  Future<void> _pickWeek(BuildContext anchorContext) async {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    final DateTime? picked = await showAppCupertinoWheelPicker(
+      context: context,
+      anchorContext: anchorContext,
+      title: l10n.calendarPickWeek,
+      initialDateTime: _selectedDay,
+      minimumDate: _calendarFirstDay,
+      maximumDate: _calendarLastDay,
+      mode: CupertinoDatePickerMode.date,
+    );
+    if (picked == null || !mounted) {
+      return;
+    }
+    setState(() {
+      _selectedDay = DateTimeUtils.startOfDay(picked);
+      _focusedDay = _selectedDay;
+    });
+  }
+
+  Widget _buildTappablePeriodTitle({
+    required String label,
+    required Future<void> Function(BuildContext anchorContext) onTap,
+    TextStyle? style,
+  }) {
+    return Builder(
+      builder: (BuildContext anchorContext) {
+        return Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () => onTap(anchorContext),
+            borderRadius: BorderRadius.circular(8),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              child: Text(
+                label,
+                textAlign: TextAlign.center,
+                overflow: TextOverflow.ellipsis,
+                style: style,
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     ref.watch(reminderListProvider);
@@ -227,10 +323,48 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
         children: <Widget>[
           Padding(
             padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
-            child: TableCalendar<void>(
-            firstDay: DateTime(2020, 1, 1),
-            lastDay: DateTime(2035, 12, 31),
+            child: Column(
+              children: <Widget>[
+                Row(
+                  children: <Widget>[
+                    IconButton(
+                      onPressed: () => _shiftMonth(-1),
+                      icon: const Icon(
+                        Icons.chevron_left,
+                        color: AppTheme.primaryColor,
+                        size: 24,
+                      ),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    Expanded(
+                      child: Center(
+                        child: _buildTappablePeriodTitle(
+                          label: _formatMonthYearHeader(_focusedDay),
+                          onTap: _pickMonthYear,
+                          style: const TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w600,
+                            color: AppTheme.textPrimaryColor,
+                          ),
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => _shiftMonth(1),
+                      icon: const Icon(
+                        Icons.chevron_right,
+                        color: AppTheme.primaryColor,
+                        size: 24,
+                      ),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ],
+                ),
+                TableCalendar<void>(
+            firstDay: _calendarFirstDay,
+            lastDay: _calendarLastDay,
             focusedDay: _focusedDay,
+            headerVisible: false,
             sixWeekMonthsEnforced: true,
             rowHeight: 48,
             daysOfWeekHeight: 16,
@@ -248,18 +382,6 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
               final int count = notifier.fixedReminderCountForDay(day);
               return List<void>.filled(count, null, growable: false);
             },
-            headerStyle: const HeaderStyle(
-              titleCentered: true,
-              formatButtonVisible: false,
-              headerPadding: EdgeInsets.symmetric(vertical: 8),
-              titleTextStyle: TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.w600,
-                color: AppTheme.textPrimaryColor,
-              ),
-              leftChevronIcon: Icon(Icons.chevron_left, color: AppTheme.primaryColor, size: 24),
-              rightChevronIcon: Icon(Icons.chevron_right, color: AppTheme.primaryColor, size: 24),
-            ),
             calendarStyle: CalendarStyle(
               outsideDaysVisible: false,
               cellMargin: const EdgeInsets.all(2),
@@ -312,6 +434,8 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
                 );
               },
             ),
+                ),
+              ],
             ),
           ),
         ],
@@ -352,12 +476,15 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
                     visualDensity: VisualDensity.compact,
                   ),
                   Expanded(
-                    child: Text(
-                      '${DateTimeUtils.formatDate(weekStart)} - ${DateTimeUtils.formatDate(weekEnd)}',
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
+                    child: Center(
+                      child: _buildTappablePeriodTitle(
+                        label:
+                            '${DateTimeUtils.formatDate(weekStart)} - ${DateTimeUtils.formatDate(weekEnd)}',
+                        onTap: _pickWeek,
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                      ),
                     ),
                   ),
                   IconButton(
