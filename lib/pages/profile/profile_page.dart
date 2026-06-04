@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:murmur/core/theme/app_theme.dart';
 import 'package:murmur/core/utils/app_settings_storage.dart';
 import 'package:murmur/l10n/app_localizations.dart';
+import 'package:murmur/providers/calendar_week_start_provider.dart';
 import 'package:murmur/providers/locale_provider.dart';
 import 'package:murmur/providers/todo_display_settings_provider.dart';
 import 'package:murmur/widgets/app_ui.dart';
@@ -30,6 +31,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final Locale locale = ref.watch(localeProvider);
     final bool showTodoCreatedDate = ref.watch(showTodoCreatedDateProvider);
+    final bool weekStartsOnMonday = ref.watch(calendarWeekStartsOnMondayProvider);
 
     return Scaffold(
       appBar: AppBar(title: Text(l10n.profilePageTitle)),
@@ -105,6 +107,47 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                   ref
                       .read(showTodoCreatedDateProvider.notifier)
                       .setShowTodoCreatedDate(value);
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          AppSectionHeader(title: l10n.profileSectionCalendar),
+          AppGroupedSection(
+            children: <Widget>[
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                child: Text(
+                  l10n.profileWeekStartTitle,
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+              ),
+              RadioListTile<bool>(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                title: Text(l10n.profileWeekStartMonday),
+                value: true,
+                groupValue: weekStartsOnMonday,
+                activeColor: AppTheme.primaryColor,
+                onChanged: (bool? value) {
+                  if (value != null) {
+                    ref
+                        .read(calendarWeekStartsOnMondayProvider.notifier)
+                        .setWeekStartsOnMonday(true);
+                  }
+                },
+              ),
+              RadioListTile<bool>(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                value: false,
+                groupValue: weekStartsOnMonday,
+                activeColor: AppTheme.primaryColor,
+                title: Text(l10n.profileWeekStartSunday),
+                onChanged: (bool? value) {
+                  if (value != null) {
+                    ref
+                        .read(calendarWeekStartsOnMondayProvider.notifier)
+                        .setWeekStartsOnMonday(false);
+                  }
                 },
               ),
             ],

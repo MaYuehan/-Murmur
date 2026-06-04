@@ -61,6 +61,10 @@ class AppLocalizations {
         '在待办列表卡片底部显示创建日期',
         'Show the created date at the bottom of task cards',
       );
+  String get profileSectionCalendar => _t('日历', 'Calendar');
+  String get profileWeekStartTitle => _t('每周起始日', 'Week starts on');
+  String get profileWeekStartMonday => _t('星期一', 'Monday');
+  String get profileWeekStartSunday => _t('星期日', 'Sunday');
   String get profileSectionLanguage => _t('语言', 'Language');
   String get profileLanguageChinese => _t('中文', 'Chinese');
   String get profileLanguageEnglish => 'English';
@@ -80,20 +84,23 @@ class AppLocalizations {
   String get calendarViewWeek => _t('周', 'Week');
   String get calendarPrevWeek => _t('上一周', 'Previous week');
   String get calendarNextWeek => _t('下一周', 'Next week');
-  String get calendarBackToCurrentWeek => _t('回到本周', 'This week');
+  String get calendarBackToToday => _t('回到今天', 'Back to today');
+  String get calendarToday => _t('今天', 'Today');
   String get calendarPickMonthYear => _t('选择年月', 'Select month');
   String get calendarPickWeek => _t('选择周', 'Select week');
   String get calendarEmptyDayTitle => _t('当天暂无日程', 'No events today');
   String get calendarEmptyDaySubtitle =>
       _t('点击右上角「新建」添加', 'Tap “New” at top right to add');
-  String get calendarWeekAgendaTitle => _t('本周日程', 'This week');
-  String get calendarScopeThisWeek => _t('本周', 'Week');
+  String calendarScopeWeek(bool isCurrentWeek) =>
+      isCurrentWeek ? _t('本周', 'Week') : _t('当周', 'Week');
   String get calendarScopeSelectedDay => _t('当天', 'Day');
   String get calendarDeadlineSection => _t('截止', 'Deadline');
   String get calendarScheduleSection => _t('日程', 'Schedule');
   String calendarEmptyDayNamedTitle(String date) =>
       _t('$date 暂无日程', 'No events on $date');
-  String get calendarEmptyWeekTitle => _t('本周暂无日程', 'No events this week');
+  String calendarEmptyWeekTitle(bool isCurrentWeek) => isCurrentWeek
+      ? _t('本周暂无日程', 'No events this week')
+      : _t('当周暂无日程', 'No events this week');
   String get calendarEmptyWeekSubtitle =>
       _t('切换其他周或新建日程', 'Switch week or create an event');
   String get calendarDeleteTitle => _t('删除日程', 'Delete event');

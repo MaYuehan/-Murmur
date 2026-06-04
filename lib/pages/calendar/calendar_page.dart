@@ -4,12 +4,15 @@ import 'package:intl/intl.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:murmur/core/theme/app_theme.dart';
+import 'package:murmur/core/utils/calendar_layout_utils.dart';
 import 'package:murmur/core/utils/date_time_utils.dart';
 import 'package:murmur/l10n/app_localizations.dart';
 import 'package:murmur/models/reminder.dart';
 import 'package:murmur/pages/calendar/reminder_detail_page.dart';
+import 'package:murmur/providers/calendar_week_start_provider.dart';
 import 'package:murmur/providers/notification_navigation_provider.dart';
 import 'package:murmur/providers/reminder_provider.dart';
+import 'package:murmur/widgets/app_calendar_styles.dart';
 import 'package:murmur/widgets/app_date_picker.dart';
 import 'package:murmur/widgets/app_slidable_action_button.dart';
 import 'package:murmur/widgets/app_ui.dart';
@@ -38,12 +41,40 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
   _CalendarViewMode _viewMode = _CalendarViewMode.month;
   _WeekAgendaScope _weekAgendaScope = _WeekAgendaScope.week;
 
+  static const double _weekDaysRowHeight = 84;
+
+  late final PageController _weekPageController = PageController(
+    initialPage: _weekPageIndexFor(DateTime.now()),
+  );
+
+  int get _weekPageCount {
+    final DateTime start = DateTimeUtils.startOfWeek(_calendarFirstDay);
+    final DateTime end = DateTimeUtils.startOfWeek(_calendarLastDay);
+    return end.difference(start).inDays ~/ 7 + 1;
+  }
+
+  static int _weekPageIndexFor(DateTime day) {
+    final DateTime start = DateTimeUtils.startOfWeek(_calendarFirstDay);
+    final DateTime target = DateTimeUtils.startOfWeek(day);
+    return target.difference(start).inDays ~/ 7;
+  }
+
+  DateTime _weekStartForPageIndex(int index) {
+    return DateTimeUtils.startOfWeek(_calendarFirstDay).add(Duration(days: 7 * index));
+  }
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _applyNotificationTargetIfNeeded();
     });
+  }
+
+  @override
+  void dispose() {
+    _weekPageController.dispose();
+    super.dispose();
   }
 
   void _openCreateReminderSheet() {
@@ -141,18 +172,64 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
     });
   }
 
-  void _shiftWeek(int weekDelta) {
+  void _onWeekPageChanged(int index) {
+    final DateTime weekStart = DateTimeUtils.startOfWeek(_selectedDay);
+    final int dayOffset = _selectedDay.difference(weekStart).inDays;
+    final DateTime newSelected = _weekStartForPageIndex(index).add(Duration(days: dayOffset));
+    if (isSameDay(newSelected, _selectedDay)) {
+      return;
+    }
     setState(() {
-      _selectedDay = _selectedDay.add(Duration(days: 7 * weekDelta));
-      _focusedDay = _selectedDay;
+      _selectedDay = newSelected;
+      _focusedDay = newSelected;
     });
   }
 
-  void _goToCurrentWeek() {
+  void _syncWeekPageControllerToSelectedDay({bool animate = false}) {
+    final int index = _weekPageIndexFor(_selectedDay);
+    if (!_weekPageController.hasClients) {
+      return;
+    }
+    final double? page = _weekPageController.page;
+    if (page != null && page.round() == index) {
+      return;
+    }
+    if (animate) {
+      _weekPageController.animateToPage(
+        index,
+        duration: const Duration(milliseconds: 280),
+        curve: Curves.easeInOut,
+      );
+    } else {
+      _weekPageController.jumpToPage(index);
+    }
+  }
+
+  void _shiftWeek(int weekDelta) {
+    if (!_weekPageController.hasClients) {
+      return;
+    }
+    final int current =
+        _weekPageController.page?.round() ?? _weekPageIndexFor(_selectedDay);
+    final int target = current + weekDelta;
+    if (target < 0 || target >= _weekPageCount) {
+      return;
+    }
+    _weekPageController.animateToPage(
+      target,
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeInOut,
+    );
+  }
+
+  void _goToToday() {
     final DateTime today = DateTimeUtils.startOfDay(DateTime.now());
     setState(() {
       _selectedDay = today;
       _focusedDay = today;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _syncWeekPageControllerToSelectedDay(animate: true);
     });
   }
 
@@ -161,9 +238,81 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
     return DateTimeUtils.startOfWeek(day) == DateTimeUtils.startOfWeek(today);
   }
 
+  bool _isCurrentMonth(DateTime day) {
+    final DateTime today = DateTimeUtils.startOfDay(DateTime.now());
+    return day.year == today.year && day.month == today.month;
+  }
+
+  Widget _buildBackToTodayButton(AppLocalizations l10n) {
+    return Center(
+      child: TextButton(
+        onPressed: _goToToday,
+        style: TextButton.styleFrom(
+          visualDensity: VisualDensity.compact,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          minimumSize: Size.zero,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          foregroundColor: AppTheme.primaryColor,
+        ),
+        child: Text(
+          l10n.calendarBackToToday,
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+            color: AppTheme.primaryColor,
+          ),
+        ),
+      ),
+    );
+  }
+
   String _formatMonthYearHeader(DateTime day) {
     final String localeName = Localizations.localeOf(context).toString();
     return DateFormat.yMMMM(localeName).format(day);
+  }
+
+  String _formatAppBarYear() {
+    final int year = _viewMode == _CalendarViewMode.month
+        ? _focusedDay.year
+        : _selectedDay.year;
+    final String localeName = Localizations.localeOf(context).toString();
+    return DateFormat.y(localeName).format(DateTime(year));
+  }
+
+  TextStyle _appBarYearTextStyle(BuildContext context) {
+    return Theme.of(context).appBarTheme.titleTextStyle?.copyWith(
+          fontSize: 22,
+          fontWeight: FontWeight.w600,
+          letterSpacing: -0.3,
+        ) ??
+        const TextStyle(
+          fontSize: 22,
+          fontWeight: FontWeight.w600,
+          color: AppTheme.textPrimaryColor,
+        );
+  }
+
+  String _formatMonthDay(DateTime day) {
+    final String localeName = Localizations.localeOf(context).toString();
+    return DateFormat.MMMd(localeName).format(day);
+  }
+
+  /// Month agenda section header: `今天 · 6月1日` or e.g. `6月1日`.
+  String _formatMonthAgendaDateHeader(DateTime day, AppLocalizations l10n) {
+    final String monthDay = _formatMonthDay(day);
+    if (isSameDay(day, DateTime.now())) {
+      return '${l10n.calendarToday} · $monthDay';
+    }
+    return monthDay;
+  }
+
+  /// Week agenda section header: `今天 · 6月1日` or e.g. `周一 · 6月1日`.
+  String _formatWeekAgendaDateHeader(DateTime day, AppLocalizations l10n) {
+    final String monthDay = _formatMonthDay(day);
+    if (isSameDay(day, DateTime.now())) {
+      return '${l10n.calendarToday} · $monthDay';
+    }
+    return '${DateTimeUtils.weekdayLabel(day.weekday)} · $monthDay';
   }
 
   void _shiftMonth(int monthDelta) {
@@ -222,6 +371,9 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
       _selectedDay = DateTimeUtils.startOfDay(picked);
       _focusedDay = _selectedDay;
     });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _syncWeekPageControllerToSelectedDay();
+    });
   }
 
   Widget _buildTappablePeriodTitle({
@@ -254,6 +406,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
   @override
   Widget build(BuildContext context) {
     ref.watch(reminderListProvider);
+    ref.watch(calendarWeekStartsOnMondayProvider);
     ref.watch(notificationNavigationTargetProvider);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _applyNotificationTargetIfNeeded();
@@ -263,7 +416,49 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(l10n.appTitle),
+        flexibleSpace: SafeArea(
+          bottom: false,
+          child: Align(
+            alignment: Alignment.bottomCenter,
+            child: SizedBox(
+              height: kToolbarHeight,
+              width: double.infinity,
+              child: Stack(
+                alignment: Alignment.center,
+                clipBehavior: Clip.none,
+                children: <Widget>[
+                  AppUnderlineTabControl<_CalendarViewMode>(
+                    options: <AppSegmentOption<_CalendarViewMode>>[
+                      AppSegmentOption(
+                        value: _CalendarViewMode.month,
+                        label: l10n.calendarViewMonth,
+                      ),
+                      AppSegmentOption(
+                        value: _CalendarViewMode.week,
+                        label: l10n.calendarViewWeek,
+                      ),
+                    ],
+                    selected: _viewMode,
+                    onChanged: (_CalendarViewMode mode) {
+                      setState(() => _viewMode = mode);
+                    },
+                  ),
+                  Positioned(
+                    left: AppTheme.pagePadding,
+                    top: 0,
+                    bottom: 0,
+                    child: Center(
+                      child: Text(
+                        _formatAppBarYear(),
+                        style: _appBarYearTextStyle(context),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
         actions: <Widget>[
           AppBarTextAction(
             label: l10n.commonCreate,
@@ -277,17 +472,6 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              AppSegmentedControl<_CalendarViewMode>(
-                options: <AppSegmentOption<_CalendarViewMode>>[
-                  AppSegmentOption(value: _CalendarViewMode.month, label: l10n.calendarViewMonth),
-                  AppSegmentOption(value: _CalendarViewMode.week, label: l10n.calendarViewWeek),
-                ],
-                selected: _viewMode,
-                onChanged: (_CalendarViewMode mode) {
-                  setState(() => _viewMode = mode);
-                },
-              ),
-              const SizedBox(height: 12),
               Expanded(
                 child: CustomScrollView(
                   slivers: <Widget>[
@@ -310,7 +494,9 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
   }
 
   Widget _buildMonthCalendar(ReminderNotifier notifier) {
-    final ColorScheme scheme = Theme.of(context).colorScheme;
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    final bool isCurrentMonth = _isCurrentMonth(_focusedDay);
+    final bool weekStartsOnMonday = ref.watch(calendarWeekStartsOnMondayProvider);
 
     return Container(
       decoration: BoxDecoration(
@@ -326,7 +512,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
       child: AppGroupedSection(
         children: <Widget>[
           Padding(
-            padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
+            padding: const EdgeInsets.fromLTRB(8, 6, 8, 10),
             child: Column(
               children: <Widget>[
                 Row(
@@ -364,14 +550,27 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
                     ),
                   ],
                 ),
-                TableCalendar<void>(
-            firstDay: _calendarFirstDay,
-            lastDay: _calendarLastDay,
-            focusedDay: _focusedDay,
-            headerVisible: false,
-            sixWeekMonthsEnforced: true,
-            rowHeight: 48,
-            daysOfWeekHeight: 16,
+                if (!isCurrentMonth) _buildBackToTodayButton(l10n),
+                AppInsetPanel(
+                  child: AnimatedSize(
+                  duration: const Duration(milliseconds: 220),
+                  curve: Curves.easeInOut,
+                  alignment: Alignment.topCenter,
+                  clipBehavior: Clip.none,
+                  child: TableCalendar<void>(
+                    key: ValueKey<String>(
+                      'month_${_focusedDay.year}_${_focusedDay.month}_$weekStartsOnMonday',
+                    ),
+                    firstDay: _calendarFirstDay,
+                    lastDay: _calendarLastDay,
+                    focusedDay: _focusedDay,
+                    startingDayOfWeek: weekStartsOnMonday
+                        ? StartingDayOfWeek.monday
+                        : StartingDayOfWeek.sunday,
+                    headerVisible: false,
+                    sixWeekMonthsEnforced: false,
+                    rowHeight: CalendarLayoutUtils.monthRowHeight,
+                    daysOfWeekHeight: CalendarLayoutUtils.daysOfWeekHeight,
             selectedDayPredicate: (DateTime day) => isSameDay(_selectedDay, day),
             onDaySelected: (DateTime selectedDay, DateTime focusedDay) {
               setState(() {
@@ -386,58 +585,10 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
               final int count = notifier.fixedReminderCountForDay(day);
               return List<void>.filled(count, null, growable: false);
             },
-            calendarStyle: CalendarStyle(
-              outsideDaysVisible: false,
-              cellMargin: const EdgeInsets.all(2),
-              defaultTextStyle: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w400,
-                color: AppTheme.textPrimaryColor,
-              ),
-              weekendTextStyle: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w400,
-                color: AppTheme.textPrimaryColor,
-              ),
-              selectedTextStyle: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: scheme.onPrimary,
-              ),
-              todayTextStyle: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-                color: AppTheme.textPrimaryColor,
-              ),
-              markerSize: 4,
-              markerMargin: const EdgeInsets.only(top: 4),
-              markersMaxCount: 1,
-              markerDecoration: BoxDecoration(
-                color: scheme.primary,
-                shape: BoxShape.circle,
-              ),
-              selectedDecoration: BoxDecoration(
-                color: scheme.primary,
-                shape: BoxShape.circle,
-              ),
-              todayDecoration: BoxDecoration(
-                color: scheme.primary.withValues(alpha: 0.18),
-                shape: BoxShape.circle,
-              ),
-            ),
-            calendarBuilders: CalendarBuilders<void>(
-              dowBuilder: (BuildContext context, DateTime day) {
-                return Center(
-                  child: Text(
-                    DateTimeUtils.shortWeekdayLabel(day.weekday),
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          fontWeight: FontWeight.w500,
-                          color: AppTheme.secondaryLabelColor,
-                        ),
+            calendarStyle: AppCalendarStyles.calendarStyle(context),
+            calendarBuilders: AppCalendarStyles.calendarBuilders(context),
                   ),
-                );
-              },
-            ),
+                ),
                 ),
               ],
             ),
@@ -447,12 +598,86 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
     );
   }
 
+  Widget _buildWeekDaysRow({
+    required DateTime weekStart,
+    required ReminderNotifier notifier,
+    required int selectedDayOffset,
+  }) {
+    final List<DateTime> weekDays = List<DateTime>.generate(
+      7,
+      (int index) => weekStart.add(Duration(days: index)),
+    );
+    final DateTime selectedInWeek = weekStart.add(Duration(days: selectedDayOffset));
+
+    return Row(
+      children: weekDays.map((DateTime day) {
+        final bool isSelected = isSameDay(day, selectedInWeek);
+        final bool isToday = isSameDay(day, DateTime.now());
+        final int count = notifier.fixedReminderCountForDay(day);
+
+        return Expanded(
+          child: GestureDetector(
+            onTap: () => _selectDay(day),
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 2),
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? Theme.of(context).colorScheme.primary
+                    : (isToday
+                        ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.15)
+                        : Colors.transparent),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Text(
+                    DateTimeUtils.shortWeekdayLabel(day.weekday),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: isSelected
+                              ? Theme.of(context).colorScheme.onPrimary
+                              : null,
+                        ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${day.day}',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: isSelected
+                              ? Theme.of(context).colorScheme.onPrimary
+                              : null,
+                        ),
+                  ),
+                  if (count > 0)
+                    Container(
+                      margin: const EdgeInsets.only(top: 4),
+                      width: 6,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? Theme.of(context).colorScheme.onPrimary
+                            : Theme.of(context).colorScheme.primary,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
   Widget _buildWeekStrip(ReminderNotifier notifier) {
+    ref.watch(calendarWeekStartsOnMondayProvider);
     final AppLocalizations l10n = AppLocalizations.of(context);
-    final List<DateTime> weekDays = DateTimeUtils.daysInWeek(_selectedDay);
-    final DateTime weekStart = weekDays.first;
-    final DateTime weekEnd = weekDays.last;
     final bool isCurrentWeek = _isCurrentWeek(_selectedDay);
+    final DateTime weekStart = DateTimeUtils.startOfWeek(_selectedDay);
+    final int selectedDayOffset = _selectedDay.difference(weekStart).inDays;
 
     return Container(
       decoration: BoxDecoration(
@@ -482,8 +707,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
                   Expanded(
                     child: Center(
                       child: _buildTappablePeriodTitle(
-                        label:
-                            '${DateTimeUtils.formatDate(weekStart)} - ${DateTimeUtils.formatDate(weekEnd)}',
+                        label: _formatMonthYearHeader(_selectedDay),
                         onTap: _pickWeek,
                         style: Theme.of(context).textTheme.titleSmall?.copyWith(
                               fontWeight: FontWeight.w600,
@@ -499,89 +723,24 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
                   ),
                 ],
               ),
-              if (!isCurrentWeek)
-                Center(
-                  child: TextButton(
-                    onPressed: _goToCurrentWeek,
-                    style: TextButton.styleFrom(
-                      visualDensity: VisualDensity.compact,
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      foregroundColor: AppTheme.primaryColor,
-                    ),
-                    child: Text(
-                      l10n.calendarBackToCurrentWeek,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                        color: AppTheme.primaryColor,
-                      ),
-                    ),
+              if (!isCurrentWeek) _buildBackToTodayButton(l10n),
+              const SizedBox(height: 4),
+              AppInsetPanel(
+                child: SizedBox(
+                  height: _weekDaysRowHeight,
+                  child: PageView.builder(
+                    controller: _weekPageController,
+                    itemCount: _weekPageCount,
+                    onPageChanged: _onWeekPageChanged,
+                    itemBuilder: (BuildContext context, int index) {
+                      return _buildWeekDaysRow(
+                        weekStart: _weekStartForPageIndex(index),
+                        notifier: notifier,
+                        selectedDayOffset: selectedDayOffset,
+                      );
+                    },
                   ),
                 ),
-              const SizedBox(height: 4),
-              Row(
-                children: weekDays.map((DateTime day) {
-                  final bool isSelected = isSameDay(day, _selectedDay);
-                  final bool isToday = isSameDay(day, DateTime.now());
-                  final int count = notifier.fixedReminderCountForDay(day);
-
-                  return Expanded(
-                    child: GestureDetector(
-                      onTap: () => _selectDay(day),
-                      child: Container(
-                        margin: const EdgeInsets.symmetric(horizontal: 2),
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        decoration: BoxDecoration(
-                          color: isSelected
-                              ? Theme.of(context).colorScheme.primary
-                              : (isToday
-                                  ? Theme.of(context)
-                                      .colorScheme
-                                      .primary
-                                      .withValues(alpha: 0.15)
-                                  : Colors.transparent),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Column(
-                          children: <Widget>[
-                            Text(
-                              DateTimeUtils.shortWeekdayLabel(day.weekday),
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: isSelected
-                                        ? Theme.of(context).colorScheme.onPrimary
-                                        : null,
-                                  ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              '${day.day}',
-                              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                    fontWeight: FontWeight.w700,
-                                    color: isSelected
-                                        ? Theme.of(context).colorScheme.onPrimary
-                                        : null,
-                                  ),
-                            ),
-                            if (count > 0)
-                              Container(
-                                margin: const EdgeInsets.only(top: 4),
-                                width: 6,
-                                height: 6,
-                                decoration: BoxDecoration(
-                                  color: isSelected
-                                      ? Theme.of(context).colorScheme.onPrimary
-                                      : Theme.of(context).colorScheme.primary,
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  );
-                }).toList(),
               ),
             ],
             ),
@@ -609,7 +768,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final List<Reminder> reminders =
         notifier.getFixedRemindersByDay(_selectedDay);
-    final String dateTitle = DateTimeUtils.formatDate(_selectedDay);
+    final String dateTitle = _formatMonthAgendaDateHeader(_selectedDay, l10n);
 
     return <Widget>[
       _pinnedAgendaDateHeader(dateTitle),
@@ -628,45 +787,34 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
 
   List<Widget> _buildWeekAgendaSlivers(ReminderNotifier notifier) {
     final AppLocalizations l10n = AppLocalizations.of(context);
+    final bool isCurrentWeek = _isCurrentWeek(_selectedDay);
 
     return <Widget>[
       SliverToBoxAdapter(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
-          child: Row(
-            children: <Widget>[
-              if (_weekAgendaScope == _WeekAgendaScope.week)
-                Expanded(
-                  child: Text(
-                    l10n.calendarWeekAgendaTitle,
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: SizedBox(
+              width: 128,
+              child: AppSegmentedControl<_WeekAgendaScope>(
+                compact: true,
+                options: <AppSegmentOption<_WeekAgendaScope>>[
+                  AppSegmentOption(
+                    value: _WeekAgendaScope.week,
+                    label: l10n.calendarScopeWeek(isCurrentWeek),
                   ),
-                )
-              else
-                const Spacer(),
-              SizedBox(
-                width: 128,
-                child: AppSegmentedControl<_WeekAgendaScope>(
-                  compact: true,
-                  options: <AppSegmentOption<_WeekAgendaScope>>[
-                    AppSegmentOption(
-                      value: _WeekAgendaScope.week,
-                      label: l10n.calendarScopeThisWeek,
-                    ),
-                    AppSegmentOption(
-                      value: _WeekAgendaScope.day,
-                      label: l10n.calendarScopeSelectedDay,
-                    ),
-                  ],
-                  selected: _weekAgendaScope,
-                  onChanged: (_WeekAgendaScope scope) {
-                    setState(() => _weekAgendaScope = scope);
-                  },
-                ),
+                  AppSegmentOption(
+                    value: _WeekAgendaScope.day,
+                    label: l10n.calendarScopeSelectedDay,
+                  ),
+                ],
+                selected: _weekAgendaScope,
+                onChanged: (_WeekAgendaScope scope) {
+                  setState(() => _weekAgendaScope = scope);
+                },
               ),
-            ],
+            ),
           ),
         ),
       ),
@@ -681,7 +829,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final List<Reminder> reminders =
         notifier.getFixedRemindersByDay(_selectedDay);
-    final String dateTitle = DateTimeUtils.formatDate(_selectedDay);
+    final String dateTitle = _formatWeekAgendaDateHeader(_selectedDay, l10n);
 
     return <Widget>[
       _pinnedAgendaDateHeader(dateTitle),
@@ -700,6 +848,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
 
   List<Widget> _buildWeekAgendaContentSlivers(ReminderNotifier notifier) {
     final AppLocalizations l10n = AppLocalizations.of(context);
+    final bool isCurrentWeek = _isCurrentWeek(_selectedDay);
     final List<DateTime> weekDays = DateTimeUtils.daysInWeek(_selectedDay);
     final List<Widget> slivers = <Widget>[];
     var hasAnyReminders = false;
@@ -710,8 +859,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
         continue;
       }
       hasAnyReminders = true;
-      final String dateTitle =
-          '${DateTimeUtils.weekdayLabel(day.weekday)} ${DateTimeUtils.formatDate(day)}';
+      final String dateTitle = _formatWeekAgendaDateHeader(day, l10n);
       slivers.add(
         SliverMainAxisGroup(
           slivers: <Widget>[
@@ -727,7 +875,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
         SliverToBoxAdapter(
           child: AppEmptyState(
             icon: Icons.date_range_outlined,
-            title: l10n.calendarEmptyWeekTitle,
+            title: l10n.calendarEmptyWeekTitle(isCurrentWeek),
             subtitle: l10n.calendarEmptyWeekSubtitle,
           ),
         ),
@@ -853,6 +1001,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
       if (!mounted) {
         return;
       }
+      _syncWeekPageControllerToSelectedDay();
       _openReminderDetail(reminder);
     });
   }

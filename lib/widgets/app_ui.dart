@@ -23,11 +23,128 @@ class AppGroupedSection extends StatelessWidget {
   }
 }
 
+/// Swipe area with a very faint warm yellow tint.
+class AppInsetPanel extends StatelessWidget {
+  const AppInsetPanel({
+    super.key,
+    required this.child,
+    this.padding = const EdgeInsets.only(top: 8),
+    this.radius = 10,
+  });
+
+  final Widget child;
+  final EdgeInsets padding;
+  final double radius;
+
+  static Color get insetBackgroundColor =>
+      AppTheme.primaryColor.withValues(alpha: 0.025);
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(radius),
+      child: ColoredBox(
+        color: insetBackgroundColor,
+        child: Padding(padding: padding, child: child),
+      ),
+    );
+  }
+}
+
 class AppSegmentOption<T> {
   const AppSegmentOption({required this.value, required this.label});
 
   final T value;
   final String label;
+}
+
+/// Compact text tabs with a yellow underline on the selected item.
+class AppUnderlineTabControl<T> extends StatelessWidget {
+  const AppUnderlineTabControl({
+    super.key,
+    required this.options,
+    required this.selected,
+    required this.onChanged,
+    this.tabGap = 14,
+  });
+
+  final List<AppSegmentOption<T>> options;
+  final T selected;
+  final ValueChanged<T> onChanged;
+  final double tabGap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        for (int i = 0; i < options.length; i++) ...<Widget>[
+          if (i > 0) SizedBox(width: tabGap),
+          _AppUnderlineTab(
+            label: options[i].label,
+            selected: options[i].value == selected,
+            onTap: () => onChanged(options[i].value),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _AppUnderlineTab extends StatelessWidget {
+  const _AppUnderlineTab({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(4),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+          child: IntrinsicWidth(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Text(
+                  label,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                    color: selected
+                        ? AppTheme.textPrimaryColor
+                        : AppTheme.secondaryLabelColor,
+                    height: 1.1,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  curve: Curves.easeOut,
+                  height: 2,
+                  decoration: BoxDecoration(
+                    color: selected ? AppTheme.primaryColor : Colors.transparent,
+                    borderRadius: BorderRadius.circular(1),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class AppSegmentedControl<T> extends StatelessWidget {

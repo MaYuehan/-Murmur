@@ -6,6 +6,7 @@ class AppSettingsStorage {
   static const String _voiceRemindMutedKey = 'voice_remind_muted';
   static const String _appLocaleKey = 'app_locale';
   static const String _showTodoCreatedDateKey = 'show_todo_created_date';
+  static const String _weekStartsOnMondayKey = 'week_starts_on_monday';
 
   static Future<void> init() async {
     await Hive.openBox<dynamic>(_boxName);
@@ -36,5 +37,14 @@ class AppSettingsStorage {
 
   static Future<void> setShowTodoCreatedDate(bool value) async {
     await _box.put(_showTodoCreatedDateKey, value);
+  }
+
+  /// When true, weeks run Monday–Sunday; when false, Sunday–Saturday.
+  static bool get weekStartsOnMonday {
+    return _box.get(_weekStartsOnMondayKey) as bool? ?? true;
+  }
+
+  static Future<void> setWeekStartsOnMonday(bool value) async {
+    await _box.put(_weekStartsOnMondayKey, value);
   }
 }

@@ -1,4 +1,5 @@
 import 'package:intl/intl.dart';
+import 'package:murmur/core/utils/app_settings_storage.dart';
 import 'package:murmur/l10n/app_localizations.dart';
 
 class DateTimeUtils {
@@ -17,7 +18,10 @@ class DateTimeUtils {
 
   static DateTime startOfWeek(DateTime value) {
     final DateTime day = startOfDay(value);
-    return day.subtract(Duration(days: day.weekday - DateTime.monday));
+    if (AppSettingsStorage.weekStartsOnMonday) {
+      return day.subtract(Duration(days: day.weekday - DateTime.monday));
+    }
+    return day.subtract(Duration(days: day.weekday % 7));
   }
 
   static List<DateTime> daysInWeek(DateTime anchorDay) {
