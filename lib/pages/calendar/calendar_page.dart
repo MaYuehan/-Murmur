@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:murmur/core/theme/app_theme.dart';
+import 'package:murmur/core/utils/app_settings_storage.dart';
 import 'package:murmur/core/utils/calendar_layout_utils.dart';
 import 'package:murmur/core/utils/date_time_utils.dart';
 import 'package:murmur/l10n/app_localizations.dart';
@@ -40,6 +41,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
   String? _highlightedReminderId;
   _CalendarViewMode _viewMode = _CalendarViewMode.month;
   _WeekAgendaScope _weekAgendaScope = _WeekAgendaScope.week;
+  bool _calendarViewPinned = AppSettingsStorage.calendarViewPinned;
 
   static const double _weekDaysRowHeight = 84;
 
@@ -376,6 +378,73 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
     });
   }
 
+  Future<void> _toggleCalendarViewPinned() async {
+    setState(() => _calendarViewPinned = !_calendarViewPinned);
+    await AppSettingsStorage.setCalendarViewPinned(_calendarViewPinned);
+  }
+
+  Widget _buildPinViewButton(AppLocalizations l10n) {
+    return IconButton(
+      onPressed: _toggleCalendarViewPinned,
+      icon: Icon(
+        _calendarViewPinned ? Icons.push_pin : Icons.push_pin_outlined,
+        size: 18,
+        color: _calendarViewPinned
+            ? AppTheme.primaryColor
+            : AppTheme.secondaryLabelColor,
+      ),
+      tooltip: _calendarViewPinned ? l10n.calendarUnpinView : l10n.calendarPinView,
+      visualDensity: VisualDensity.compact,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+    );
+  }
+
+  Widget _buildCalendarPeriodHeader({
+    required AppLocalizations l10n,
+    required String label,
+    required Future<void> Function(BuildContext anchorContext) onTap,
+    required VoidCallback onPrevious,
+    required VoidCallback onNext,
+    required String previousTooltip,
+    required String nextTooltip,
+    TextStyle? titleStyle,
+  }) {
+    return Row(
+      children: <Widget>[
+        IconButton(
+          onPressed: onPrevious,
+          icon: const Icon(Icons.chevron_left, color: AppTheme.primaryColor),
+          tooltip: previousTooltip,
+          visualDensity: VisualDensity.compact,
+        ),
+        Expanded(
+          child: Center(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Flexible(
+                  child: _buildTappablePeriodTitle(
+                    label: label,
+                    onTap: onTap,
+                    style: titleStyle,
+                  ),
+                ),
+                _buildPinViewButton(l10n),
+              ],
+            ),
+          ),
+        ),
+        IconButton(
+          onPressed: onNext,
+          icon: const Icon(Icons.chevron_right, color: AppTheme.primaryColor),
+          tooltip: nextTooltip,
+          visualDensity: VisualDensity.compact,
+        ),
+      ],
+    );
+  }
+
   Widget _buildTappablePeriodTitle({
     required String label,
     required Future<void> Function(BuildContext anchorContext) onTap,
@@ -472,24 +541,49 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              Expanded(
-                child: CustomScrollView(
-                  slivers: <Widget>[
-                    SliverToBoxAdapter(
-                      child: _viewMode == _CalendarViewMode.month
-                          ? _buildMonthCalendar(reminderNotifier)
-                          : _buildWeekStrip(reminderNotifier),
-                    ),
-                    const SliverToBoxAdapter(child: SizedBox(height: 12)),
-                    ..._buildAgendaSlivers(reminderNotifier),
-                    const SliverToBoxAdapter(child: SizedBox(height: 16)),
-                  ],
-                ),
-              ),
+              Expanded(child: _buildCalendarBody(reminderNotifier)),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildCalendarPanel(ReminderNotifier notifier) {
+    return _viewMode == _CalendarViewMode.month
+        ? _buildMonthCalendar(notifier)
+        : _buildWeekStrip(notifier);
+  }
+
+  Widget _buildCalendarBody(ReminderNotifier notifier) {
+    final Widget calendarPanel = _buildCalendarPanel(notifier);
+    final List<Widget> agendaSlivers = _buildAgendaSlivers(notifier);
+
+    if (_calendarViewPinned) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          calendarPanel,
+          const SizedBox(height: 12),
+          Expanded(
+            child: CustomScrollView(
+              slivers: <Widget>[
+                ...agendaSlivers,
+                const SliverToBoxAdapter(child: SizedBox(height: 16)),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
+
+    return CustomScrollView(
+      slivers: <Widget>[
+        SliverToBoxAdapter(child: calendarPanel),
+        const SliverToBoxAdapter(child: SizedBox(height: 12)),
+        ...agendaSlivers,
+        const SliverToBoxAdapter(child: SizedBox(height: 16)),
+      ],
     );
   }
 
@@ -515,40 +609,19 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
             padding: const EdgeInsets.fromLTRB(8, 6, 8, 10),
             child: Column(
               children: <Widget>[
-                Row(
-                  children: <Widget>[
-                    IconButton(
-                      onPressed: () => _shiftMonth(-1),
-                      icon: const Icon(
-                        Icons.chevron_left,
-                        color: AppTheme.primaryColor,
-                        size: 24,
-                      ),
-                      visualDensity: VisualDensity.compact,
-                    ),
-                    Expanded(
-                      child: Center(
-                        child: _buildTappablePeriodTitle(
-                          label: _formatMonthYearHeader(_focusedDay),
-                          onTap: _pickMonthYear,
-                          style: const TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.w600,
-                            color: AppTheme.textPrimaryColor,
-                          ),
-                        ),
-                      ),
-                    ),
-                    IconButton(
-                      onPressed: () => _shiftMonth(1),
-                      icon: const Icon(
-                        Icons.chevron_right,
-                        color: AppTheme.primaryColor,
-                        size: 24,
-                      ),
-                      visualDensity: VisualDensity.compact,
-                    ),
-                  ],
+                _buildCalendarPeriodHeader(
+                  l10n: l10n,
+                  label: _formatMonthYearHeader(_focusedDay),
+                  onTap: _pickMonthYear,
+                  onPrevious: () => _shiftMonth(-1),
+                  onNext: () => _shiftMonth(1),
+                  previousTooltip: l10n.calendarPrevMonth,
+                  nextTooltip: l10n.calendarNextMonth,
+                  titleStyle: const TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.textPrimaryColor,
+                  ),
                 ),
                 if (!isCurrentMonth) _buildBackToTodayButton(l10n),
                 AppInsetPanel(
@@ -696,32 +769,17 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
             padding: const EdgeInsets.fromLTRB(4, 8, 4, 12),
             child: Column(
             children: <Widget>[
-              Row(
-                children: <Widget>[
-                  IconButton(
-                    onPressed: () => _shiftWeek(-1),
-                    icon: const Icon(Icons.chevron_left, color: AppTheme.primaryColor),
-                    tooltip: l10n.calendarPrevWeek,
-                    visualDensity: VisualDensity.compact,
-                  ),
-                  Expanded(
-                    child: Center(
-                      child: _buildTappablePeriodTitle(
-                        label: _formatMonthYearHeader(_selectedDay),
-                        onTap: _pickWeek,
-                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
-                      ),
+              _buildCalendarPeriodHeader(
+                l10n: l10n,
+                label: _formatMonthYearHeader(_selectedDay),
+                onTap: _pickWeek,
+                onPrevious: () => _shiftWeek(-1),
+                onNext: () => _shiftWeek(1),
+                previousTooltip: l10n.calendarPrevWeek,
+                nextTooltip: l10n.calendarNextWeek,
+                titleStyle: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
                     ),
-                  ),
-                  IconButton(
-                    onPressed: () => _shiftWeek(1),
-                    icon: const Icon(Icons.chevron_right, color: AppTheme.primaryColor),
-                    tooltip: l10n.calendarNextWeek,
-                    visualDensity: VisualDensity.compact,
-                  ),
-                ],
               ),
               if (!isCurrentWeek) _buildBackToTodayButton(l10n),
               const SizedBox(height: 4),

@@ -7,6 +7,7 @@ class AppSettingsStorage {
   static const String _appLocaleKey = 'app_locale';
   static const String _showTodoCreatedDateKey = 'show_todo_created_date';
   static const String _weekStartsOnMondayKey = 'week_starts_on_monday';
+  static const String _calendarViewPinnedKey = 'calendar_view_pinned';
 
   static Future<void> init() async {
     await Hive.openBox<dynamic>(_boxName);
@@ -46,5 +47,14 @@ class AppSettingsStorage {
 
   static Future<void> setWeekStartsOnMonday(bool value) async {
     await _box.put(_weekStartsOnMondayKey, value);
+  }
+
+  /// When true, the calendar header/grid stays fixed while the agenda scrolls.
+  static bool get calendarViewPinned {
+    return _box.get(_calendarViewPinnedKey) as bool? ?? false;
+  }
+
+  static Future<void> setCalendarViewPinned(bool value) async {
+    await _box.put(_calendarViewPinnedKey, value);
   }
 }

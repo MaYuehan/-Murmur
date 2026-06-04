@@ -82,10 +82,14 @@ class AppLocalizations {
   // Calendar
   String get calendarViewMonth => _t('月', 'Month');
   String get calendarViewWeek => _t('周', 'Week');
+  String get calendarPrevMonth => _t('上一月', 'Previous month');
+  String get calendarNextMonth => _t('下一月', 'Next month');
   String get calendarPrevWeek => _t('上一周', 'Previous week');
   String get calendarNextWeek => _t('下一周', 'Next week');
   String get calendarBackToToday => _t('回到今天', 'Back to today');
   String get calendarToday => _t('今天', 'Today');
+  String get calendarPinView => _t('定住日历', 'Pin calendar');
+  String get calendarUnpinView => _t('取消定住', 'Unpin calendar');
   String get calendarPickMonthYear => _t('选择年月', 'Select month');
   String get calendarPickWeek => _t('选择周', 'Select week');
   String get calendarEmptyDayTitle => _t('当天暂无日程', 'No events today');
