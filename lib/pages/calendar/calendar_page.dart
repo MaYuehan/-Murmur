@@ -207,23 +207,6 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
     }
   }
 
-  void _shiftWeek(int weekDelta) {
-    if (!_weekPageController.hasClients) {
-      return;
-    }
-    final int current =
-        _weekPageController.page?.round() ?? _weekPageIndexFor(_selectedDay);
-    final int target = current + weekDelta;
-    if (target < 0 || target >= _weekPageCount) {
-      return;
-    }
-    _weekPageController.animateToPage(
-      target,
-      duration: const Duration(milliseconds: 280),
-      curve: Curves.easeInOut,
-    );
-  }
-
   void _goToToday() {
     final DateTime today = DateTimeUtils.startOfDay(DateTime.now());
     setState(() {
@@ -246,31 +229,36 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
   }
 
   Widget _buildBackToTodayButton(AppLocalizations l10n) {
-    return Center(
-      child: TextButton(
-        onPressed: _goToToday,
-        style: TextButton.styleFrom(
-          visualDensity: VisualDensity.compact,
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-          minimumSize: Size.zero,
-          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          foregroundColor: AppTheme.primaryColor,
-        ),
-        child: Text(
-          l10n.calendarBackToToday,
-          style: const TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w500,
-            color: AppTheme.primaryColor,
-          ),
+    return TextButton(
+      onPressed: _goToToday,
+      style: TextButton.styleFrom(
+        visualDensity: VisualDensity.compact,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        minimumSize: Size.zero,
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        foregroundColor: AppTheme.primaryColor,
+      ),
+      child: Text(
+        l10n.calendarBackToToday,
+        style: const TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w500,
+          color: AppTheme.primaryColor,
         ),
       ),
     );
   }
 
-  String _formatMonthYearHeader(DateTime day) {
+  static const TextStyle _calendarPeriodTitleStyle = TextStyle(
+    fontSize: 17,
+    fontWeight: FontWeight.w600,
+    color: AppTheme.textPrimaryColor,
+  );
+
+  /// Month name only, e.g. `六月` / `June`.
+  String _formatMonthHeader(DateTime day) {
     final String localeName = Localizations.localeOf(context).toString();
-    return DateFormat.yMMMM(localeName).format(day);
+    return DateFormat.MMMM(localeName).format(day);
   }
 
   String _formatAppBarYear() {
@@ -315,16 +303,6 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
       return '${l10n.calendarToday} · $monthDay';
     }
     return '${DateTimeUtils.weekdayLabel(day.weekday)} · $monthDay';
-  }
-
-  void _shiftMonth(int monthDelta) {
-    setState(() {
-      final DateTime anchor = DateTime(_focusedDay.year, _focusedDay.month + monthDelta, 1);
-      final int maxDay = DateTime(anchor.year, anchor.month + 1, 0).day;
-      final int day = _selectedDay.day <= maxDay ? _selectedDay.day : maxDay;
-      _focusedDay = DateTime(anchor.year, anchor.month, day);
-      _selectedDay = _focusedDay;
-    });
   }
 
   void _applyMonthYear(DateTime monthYear) {
@@ -404,44 +382,30 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
     required AppLocalizations l10n,
     required String label,
     required Future<void> Function(BuildContext anchorContext) onTap,
-    required VoidCallback onPrevious,
-    required VoidCallback onNext,
-    required String previousTooltip,
-    required String nextTooltip,
+    required bool showBackToToday,
     TextStyle? titleStyle,
   }) {
-    return Row(
-      children: <Widget>[
-        IconButton(
-          onPressed: onPrevious,
-          icon: const Icon(Icons.chevron_left, color: AppTheme.primaryColor),
-          tooltip: previousTooltip,
-          visualDensity: VisualDensity.compact,
-        ),
-        Expanded(
-          child: Center(
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                Flexible(
-                  child: _buildTappablePeriodTitle(
-                    label: label,
-                    onTap: onTap,
-                    style: titleStyle,
-                  ),
-                ),
-                _buildPinViewButton(l10n),
-              ],
-            ),
+    return SizedBox(
+      width: double.infinity,
+      child: Stack(
+        alignment: Alignment.center,
+        clipBehavior: Clip.none,
+        children: <Widget>[
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: <Widget>[
+              if (showBackToToday) _buildBackToTodayButton(l10n),
+              const Spacer(),
+              _buildPinViewButton(l10n),
+            ],
           ),
-        ),
-        IconButton(
-          onPressed: onNext,
-          icon: const Icon(Icons.chevron_right, color: AppTheme.primaryColor),
-          tooltip: nextTooltip,
-          visualDensity: VisualDensity.compact,
-        ),
-      ],
+          _buildTappablePeriodTitle(
+            label: label,
+            onTap: onTap,
+            style: titleStyle,
+          ),
+        ],
+      ),
     );
   }
 
@@ -458,11 +422,9 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
             onTap: () => onTap(anchorContext),
             borderRadius: BorderRadius.circular(8),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              child: Text(
-                label,
-                textAlign: TextAlign.center,
-                overflow: TextOverflow.ellipsis,
+              padding: const EdgeInsets.fromLTRB(0, 6, 10, 4),
+              child: AppChalkUnderlineLabel(
+                label: label,
                 style: style,
               ),
             ),
@@ -611,19 +573,11 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
               children: <Widget>[
                 _buildCalendarPeriodHeader(
                   l10n: l10n,
-                  label: _formatMonthYearHeader(_focusedDay),
+                  label: _formatMonthHeader(_focusedDay),
                   onTap: _pickMonthYear,
-                  onPrevious: () => _shiftMonth(-1),
-                  onNext: () => _shiftMonth(1),
-                  previousTooltip: l10n.calendarPrevMonth,
-                  nextTooltip: l10n.calendarNextMonth,
-                  titleStyle: const TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w600,
-                    color: AppTheme.textPrimaryColor,
-                  ),
+                  showBackToToday: !isCurrentMonth,
+                  titleStyle: _calendarPeriodTitleStyle,
                 ),
-                if (!isCurrentMonth) _buildBackToTodayButton(l10n),
                 AppInsetPanel(
                   child: AnimatedSize(
                   duration: const Duration(milliseconds: 220),
@@ -766,24 +720,18 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
       child: AppGroupedSection(
         children: <Widget>[
           Padding(
-            padding: const EdgeInsets.fromLTRB(4, 8, 4, 12),
+            padding: const EdgeInsets.fromLTRB(4, 6, 4, 10),
             child: Column(
             children: <Widget>[
               _buildCalendarPeriodHeader(
                 l10n: l10n,
-                label: _formatMonthYearHeader(_selectedDay),
+                label: _formatMonthHeader(_selectedDay),
                 onTap: _pickWeek,
-                onPrevious: () => _shiftWeek(-1),
-                onNext: () => _shiftWeek(1),
-                previousTooltip: l10n.calendarPrevWeek,
-                nextTooltip: l10n.calendarNextWeek,
-                titleStyle: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
+                showBackToToday: !isCurrentWeek,
+                titleStyle: _calendarPeriodTitleStyle,
               ),
-              if (!isCurrentWeek) _buildBackToTodayButton(l10n),
-              const SizedBox(height: 4),
               AppInsetPanel(
+                padding: const EdgeInsets.only(top: 2),
                 child: SizedBox(
                   height: _weekDaysRowHeight,
                   child: PageView.builder(
@@ -972,17 +920,21 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
               fontWeight: FontWeight.w600,
             );
 
+    final bool showSectionTitles = deadlineReminders.isNotEmpty;
     final List<Widget> items = <Widget>[];
+
     if (deadlineReminders.isNotEmpty) {
-      items.add(
-        Padding(
-          padding: const EdgeInsets.only(bottom: 8, top: 2),
-          child: Text(
-            l10n.calendarDeadlineSection,
-            style: deadlineSectionTitleStyle,
+      if (showSectionTitles) {
+        items.add(
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8, top: 2),
+            child: Text(
+              l10n.calendarDeadlineSection,
+              style: deadlineSectionTitleStyle,
+            ),
           ),
-        ),
-      );
+        );
+      }
       for (final Reminder reminder in deadlineReminders) {
         items.add(
           Padding(
@@ -994,18 +946,20 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
     }
 
     if (normalReminders.isNotEmpty) {
-      items.add(
-        Padding(
-          padding: EdgeInsets.only(
-            bottom: 8,
-            top: deadlineReminders.isNotEmpty ? 2 : 2,
+      if (showSectionTitles) {
+        items.add(
+          Padding(
+            padding: EdgeInsets.only(
+              bottom: 8,
+              top: deadlineReminders.isNotEmpty ? 2 : 2,
+            ),
+            child: Text(
+              l10n.calendarScheduleSection,
+              style: scheduleSectionTitleStyle,
+            ),
           ),
-          child: Text(
-            l10n.calendarScheduleSection,
-            style: scheduleSectionTitleStyle,
-          ),
-        ),
-      );
+        );
+      }
     }
 
     for (final Reminder reminder in normalReminders) {

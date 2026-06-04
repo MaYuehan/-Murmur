@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:murmur/core/theme/app_theme.dart';
 
@@ -20,6 +22,99 @@ class AppGroupedSection extends StatelessWidget {
         children: children,
       ),
     );
+  }
+}
+
+/// Label with a hand-drawn chalk-style underline.
+class AppChalkUnderlineLabel extends StatelessWidget {
+  const AppChalkUnderlineLabel({
+    super.key,
+    required this.label,
+    this.style,
+    this.underlineColor = AppTheme.primaryColor,
+    this.underlineOverlap = 1,
+  });
+
+  final String label;
+  final TextStyle? style;
+  final Color underlineColor;
+  /// How far the underline rises into the text (px).
+  final double underlineOverlap;
+
+  @override
+  Widget build(BuildContext context) {
+    return IntrinsicWidth(
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: <Widget>[
+          Positioned(
+            left: -2,
+            right: -2,
+            bottom: underlineOverlap,
+            height: 10,
+            child: CustomPaint(
+              painter: _ChalkUnderlinePainter(color: underlineColor),
+              child: const SizedBox.expand(),
+            ),
+          ),
+          Text(
+            label,
+            textAlign: TextAlign.start,
+            overflow: TextOverflow.ellipsis,
+            style: style,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ChalkUnderlinePainter extends CustomPainter {
+  const _ChalkUnderlinePainter({required this.color});
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.width <= 0 || size.height <= 0) {
+      return;
+    }
+
+    final double midY = size.height * 0.85;
+    const double amplitude = 0.8;
+    const double waveLength = 0.13;
+
+    Path buildWave({double yOffset = 0}) {
+      final Path path = Path();
+      path.moveTo(0, midY + yOffset + math.sin(0) * amplitude);
+      for (double x = 1; x <= size.width; x++) {
+        final double wobble = math.sin(x * waveLength) * amplitude;
+        final double chalkMark = (x % 13).round() == 0 ? 0.4 : 0;
+        path.lineTo(x, midY + yOffset + wobble + chalkMark);
+      }
+      return path;
+    }
+
+    final Paint softChalk = Paint()
+      ..color = color.withValues(alpha: 0.3)
+      ..strokeWidth = 6
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+
+    final Paint chalk = Paint()
+      ..color = color
+      ..strokeWidth = 3.8
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+
+    canvas.drawPath(buildWave(yOffset: 0.8), softChalk);
+    canvas.drawPath(buildWave(), chalk);
+  }
+
+  @override
+  bool shouldRepaint(covariant _ChalkUnderlinePainter oldDelegate) {
+    return oldDelegate.color != color;
   }
 }
 

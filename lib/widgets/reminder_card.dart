@@ -33,7 +33,7 @@ class ReminderCard extends StatelessWidget {
       timeLabel = '--:--';
     } else if (reminder.endTime != null) {
       timeLabel =
-          '${DateTimeUtils.formatTime(scheduledTime)}-${DateTimeUtils.formatTime(reminder.endTime!)}';
+          '${DateTimeUtils.formatTime(scheduledTime)} ${DateTimeUtils.formatTime(reminder.endTime!)}';
     } else {
       timeLabel = DateTimeUtils.formatTime(scheduledTime);
     }
