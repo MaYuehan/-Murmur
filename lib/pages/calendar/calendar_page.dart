@@ -517,9 +517,69 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
         : _buildWeekStrip(notifier);
   }
 
+  Widget _buildWeekAgendaScopeTabControl({
+    required String weekLabel,
+    required String dayLabel,
+    required _WeekAgendaScope selected,
+    required ValueChanged<_WeekAgendaScope> onChanged,
+  }) {
+    return AppChipSegmentedControl<_WeekAgendaScope>(
+      options: <AppSegmentOption<_WeekAgendaScope>>[
+        AppSegmentOption(
+          value: _WeekAgendaScope.week,
+          label: weekLabel,
+        ),
+        AppSegmentOption(
+          value: _WeekAgendaScope.day,
+          label: dayLabel,
+        ),
+      ],
+      selected: selected,
+      onChanged: onChanged,
+    );
+  }
+
+  Widget _buildWeekAgendaScopeControl() {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    final bool isCurrentWeek = _isCurrentWeek(_selectedDay);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
+      child: Align(
+        alignment: Alignment.centerRight,
+        child: _buildWeekAgendaScopeTabControl(
+          weekLabel: l10n.calendarScopeWeek(isCurrentWeek),
+          dayLabel: l10n.calendarScopeSelectedDay,
+          selected: _weekAgendaScope,
+          onChanged: (_WeekAgendaScope scope) {
+            setState(() => _weekAgendaScope = scope);
+          },
+        ),
+      ),
+    );
+  }
+
+  SliverPersistentHeader _pinnedWeekAgendaScopeHeader() {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    final bool isCurrentWeek = _isCurrentWeek(_selectedDay);
+
+    return SliverPersistentHeader(
+      pinned: true,
+      delegate: _PinnedWeekAgendaScopeHeaderDelegate(
+        weekLabel: l10n.calendarScopeWeek(isCurrentWeek),
+        dayLabel: l10n.calendarScopeSelectedDay,
+        selected: _weekAgendaScope,
+        onChanged: (_WeekAgendaScope scope) {
+          setState(() => _weekAgendaScope = scope);
+        },
+      ),
+    );
+  }
+
   Widget _buildCalendarBody(ReminderNotifier notifier) {
     final Widget calendarPanel = _buildCalendarPanel(notifier);
     final List<Widget> agendaSlivers = _buildAgendaSlivers(notifier);
+    final bool showWeekScope = _viewMode == _CalendarViewMode.week;
 
     if (_calendarViewPinned) {
       return Column(
@@ -527,6 +587,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
         children: <Widget>[
           calendarPanel,
           const SizedBox(height: 12),
+          if (showWeekScope) _buildWeekAgendaScopeControl(),
           Expanded(
             child: CustomScrollView(
               slivers: <Widget>[
@@ -543,6 +604,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
       slivers: <Widget>[
         SliverToBoxAdapter(child: calendarPanel),
         const SliverToBoxAdapter(child: SizedBox(height: 12)),
+        if (showWeekScope) _pinnedWeekAgendaScopeHeader(),
         ...agendaSlivers,
         const SliverToBoxAdapter(child: SizedBox(height: 16)),
       ],
@@ -792,43 +854,10 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
   }
 
   List<Widget> _buildWeekAgendaSlivers(ReminderNotifier notifier) {
-    final AppLocalizations l10n = AppLocalizations.of(context);
-    final bool isCurrentWeek = _isCurrentWeek(_selectedDay);
-
-    return <Widget>[
-      SliverToBoxAdapter(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
-          child: Align(
-            alignment: Alignment.centerRight,
-            child: SizedBox(
-              width: 128,
-              child: AppSegmentedControl<_WeekAgendaScope>(
-                compact: true,
-                options: <AppSegmentOption<_WeekAgendaScope>>[
-                  AppSegmentOption(
-                    value: _WeekAgendaScope.week,
-                    label: l10n.calendarScopeWeek(isCurrentWeek),
-                  ),
-                  AppSegmentOption(
-                    value: _WeekAgendaScope.day,
-                    label: l10n.calendarScopeSelectedDay,
-                  ),
-                ],
-                selected: _weekAgendaScope,
-                onChanged: (_WeekAgendaScope scope) {
-                  setState(() => _weekAgendaScope = scope);
-                },
-              ),
-            ),
-          ),
-        ),
-      ),
-      if (_weekAgendaScope == _WeekAgendaScope.day)
-        ..._buildSelectedDayAgendaSlivers(notifier)
-      else
-        ..._buildWeekAgendaContentSlivers(notifier),
-    ];
+    if (_weekAgendaScope == _WeekAgendaScope.day) {
+      return _buildSelectedDayAgendaSlivers(notifier);
+    }
+    return _buildWeekAgendaContentSlivers(notifier);
   }
 
   List<Widget> _buildSelectedDayAgendaSlivers(ReminderNotifier notifier) {
@@ -1016,6 +1045,61 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
       _syncWeekPageControllerToSelectedDay();
       _openReminderDetail(reminder);
     });
+  }
+}
+
+class _PinnedWeekAgendaScopeHeaderDelegate extends SliverPersistentHeaderDelegate {
+  const _PinnedWeekAgendaScopeHeaderDelegate({
+    required this.weekLabel,
+    required this.dayLabel,
+    required this.selected,
+    required this.onChanged,
+  });
+
+  final String weekLabel;
+  final String dayLabel;
+  final _WeekAgendaScope selected;
+  final ValueChanged<_WeekAgendaScope> onChanged;
+  static const double _extent = 44;
+
+  @override
+  double get minExtent => _extent;
+
+  @override
+  double get maxExtent => _extent;
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+    return ColoredBox(
+      color: AppTheme.groupedBackgroundColor,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(4, 2, 4, 8),
+        child: Align(
+          alignment: Alignment.centerRight,
+          child: AppChipSegmentedControl<_WeekAgendaScope>(
+            options: <AppSegmentOption<_WeekAgendaScope>>[
+              AppSegmentOption(
+                value: _WeekAgendaScope.week,
+                label: weekLabel,
+              ),
+              AppSegmentOption(
+                value: _WeekAgendaScope.day,
+                label: dayLabel,
+              ),
+            ],
+            selected: selected,
+            onChanged: onChanged,
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  bool shouldRebuild(covariant _PinnedWeekAgendaScopeHeaderDelegate oldDelegate) {
+    return oldDelegate.weekLabel != weekLabel ||
+        oldDelegate.dayLabel != dayLabel ||
+        oldDelegate.selected != selected;
   }
 }
 

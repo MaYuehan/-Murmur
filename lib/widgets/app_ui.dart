@@ -244,6 +244,73 @@ class _AppUnderlineTab extends StatelessWidget {
   }
 }
 
+class AppChipSegmentedControl<T> extends StatelessWidget {
+  const AppChipSegmentedControl({
+    super.key,
+    required this.options,
+    required this.selected,
+    required this.onChanged,
+  });
+
+  final List<AppSegmentOption<T>> options;
+  final T selected;
+  final ValueChanged<T> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final ColorScheme scheme = Theme.of(context).colorScheme;
+    const double radius = 999;
+
+    return IntrinsicWidth(
+      child: Container(
+        padding: const EdgeInsets.all(2),
+        decoration: BoxDecoration(
+          color: AppTheme.cardColor,
+          borderRadius: BorderRadius.circular(radius),
+          border: Border.all(color: const Color(0xFFE5E5EA)),
+        ),
+        child: Row(
+          children: options.map((AppSegmentOption<T> option) {
+            final bool isSelected = option.value == selected;
+            return Expanded(
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () => onChanged(option.value),
+                  borderRadius: BorderRadius.circular(radius),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    curve: Curves.easeOut,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? scheme.primary.withValues(alpha: 0.12)
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(radius),
+                    ),
+                    child: Text(
+                      option.label,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 13,
+                        height: 1.2,
+                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                        color: isSelected
+                            ? scheme.primary
+                            : AppTheme.secondaryLabelColor,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+}
+
 class AppSegmentedControl<T> extends StatelessWidget {
   const AppSegmentedControl({
     super.key,
