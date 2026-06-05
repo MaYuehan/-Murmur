@@ -131,6 +131,10 @@ class AppLocalizations {
         'Clear $count completed task(s)?',
       );
   String todoDeadlineLabel(String datetime) => _t('截止 $datetime', 'Due $datetime');
+  String get todoDeadlineDueToday => _t('今天', 'Tdy');
+  String get todoDeadlineDueTomorrow => _t('明天', 'Tmr');
+  String todoDeadlineDaysLeft(int days) => _t('$days天', '${days}d');
+  String todoDeadlineOverdue(int days) => _t('已逾期', 'Overdue');
   String get todoReminderSet => _t('已设提醒', 'Reminder set');
   String todoCreatedAt(String date) => _t('创建于 $date', 'Created $date');
   String get todoDeleteFromCalendarTitle => _t('同时从日历移除？', 'Also remove from calendar?');
@@ -177,6 +181,28 @@ class AppLocalizations {
   String get todoRemindTime => _t('提醒时间', 'Reminder time');
   String get todoSameAsContent => _t('与待办内容相同', 'Same as task content');
   String get todoAdd => _t('添加', 'Add');
+  String get todoSubItemsPageTitle => _t('子项', 'Subtasks');
+  String get todoSubItemsEmptyTitle => _t('还没有子项', 'No subtasks yet');
+  String get todoSubItemsEmptySubtitle =>
+      _t('点击右上角加号添加', 'Tap + at top right to add');
+  String todoSubItemsProgress(int completed, int total) =>
+      _t('$completed/$total', '$completed/$total');
+  String get todoSubItemsSelect => _t('选择', 'Select');
+  String get todoSubItemsCancelSelect => _t('取消', 'Cancel');
+  String get todoSubItemsDeleteSelected => _t('删除', 'Delete');
+  String get todoSubItemsDeleteTitle => _t('删除子项', 'Delete subtask');
+  String todoSubItemsDeleteMessage(String title) => _t(
+        '确定删除「$title」吗？',
+        'Delete “$title”?',
+      );
+  String get todoSubItemsDeleteSelectedTitle => _t('删除所选子项？', 'Delete selected subtasks?');
+  String todoSubItemsDeleteSelectedBody(int count) => _t(
+        '确定要删除 $count 项子项吗？',
+        'Delete $count selected subtask(s)?',
+      );
+  String get todoSubItemHint => _t('添加子项…', 'Add subtask…');
+  String get todoSubItemValidation => _t('请填写子项内容', 'Please enter subtask content');
+  String get todoSubItemNewDefault => _t('新子项', 'New subtask');
 
   // Reminder / schedule
   String get reminderAllDay => _t('全天', 'All day');
@@ -215,6 +241,9 @@ class AppLocalizations {
   String get reminderVoiceSound => _t('提醒声音', 'Reminder voice');
   String get reminderRecordStop => _t('停止录音', 'Stop recording');
   String get reminderRecordStart => _t('开始录音', 'Start recording');
+  String get reminderHoldToRecord => _t('按住说话', 'Hold to talk');
+  String get reminderReleaseToStop => _t('松开结束', 'Release to stop');
+  String get reminderRerecord => _t('重录', 'Re-record');
   String get reminderPreviewRecording => _t('试听录音', 'Preview recording');
   String get reminderValidationVoice =>
       _t('请填写提醒文案并选择提醒声音', 'Enter reminder text and choose a voice');
@@ -228,6 +257,15 @@ class AppLocalizations {
   String get reminderSnackFillContent => _t('请先填写日程内容', 'Please enter event content first');
   String get reminderSnackMicPermission =>
       _t('录音权限不可用', 'Microphone permission unavailable');
+  String get reminderMicPermissionTitle =>
+      _t('需要麦克风权限', 'Microphone access needed');
+  String get reminderMicPermissionBody => _t(
+        '请在系统设置中允许 Murmur 使用麦克风，以便录制亲声提醒。',
+        'Allow Murmur to use the microphone in Settings to record voice reminders.',
+      );
+  String get reminderMicPermissionOpenSettings => _t('去设置', 'Open Settings');
+  String get notificationTapToPlayVoice =>
+      _t('亲声提醒 · 点开播放', 'Voice reminder · tap to play');
   String get reminderUnscheduled => _t('未安排时间', 'Not scheduled');
   String get reminderRemindNone => _t('无', 'None');
   String get reminderRemindUnset => _t('未设置', 'Not set');

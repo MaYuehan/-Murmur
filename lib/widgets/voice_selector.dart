@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:murmur/core/utils/microphone_permission.dart';
 import 'package:murmur/services/voice_service.dart';
 import 'package:murmur/l10n/app_localizations.dart';
 
@@ -93,6 +94,9 @@ class _VoiceSelectorState extends State<VoiceSelector> {
     }
 
     try {
+      if (!await requestMicrophoneForRecording(context)) {
+        return;
+      }
       await VoiceService.startRecording();
       if (!mounted) {
         return;

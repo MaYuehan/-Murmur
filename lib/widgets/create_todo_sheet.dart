@@ -13,6 +13,7 @@ import 'package:murmur/widgets/inline_date_picker.dart';
 import 'package:murmur/widgets/inline_datetime_picker.dart';
 import 'package:murmur/widgets/inline_repeat_days_picker.dart';
 import 'package:murmur/widgets/inline_time_picker.dart';
+import 'package:murmur/widgets/voice_record_panel.dart';
 
 enum _VoiceRemindMode { textAndPreset, record }
 
@@ -50,6 +51,7 @@ class CreateTodoSheet extends ConsumerStatefulWidget {
 
 class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
   final TextEditingController _titleController = TextEditingController();
+  final TextEditingController _notesController = TextEditingController();
   final TextEditingController _remindTextController = TextEditingController();
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   final ScrollController _scrollController = ScrollController();
@@ -68,7 +70,6 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
   String _voiceSelection = VoiceService.defaultVoiceId;
   _VoiceRemindMode _voiceRemindMode = _VoiceRemindMode.textAndPreset;
   String? _recordingPath;
-  bool _isRecording = false;
   _ExpandedField _expandedField = _ExpandedField.none;
 
   bool get _isEditing => widget.editingReminder != null;
@@ -86,6 +87,7 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
     }
 
     _titleController.text = existing.title;
+    _notesController.text = existing.notes ?? '';
     _remindTextController.text = existing.remindText ?? '';
     _hasDeadline = existing.hasDeadline;
     if (existing.deadlineAt != null) {
@@ -153,6 +155,7 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
   @override
   void dispose() {
     _titleController.dispose();
+    _notesController.dispose();
     _remindTextController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -274,49 +277,6 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
       return;
     }
     _setStatePreservingScroll(() => _remindTextController.text = title);
-  }
-
-  Future<void> _toggleRecording() async {
-    if (_isRecording) {
-      final String? path = await VoiceService.stopRecording();
-      if (!mounted) {
-        return;
-      }
-      _setStatePreservingScroll(() {
-        _isRecording = false;
-        if (path != null && path.isNotEmpty) {
-          _recordingPath = path;
-        }
-      });
-      return;
-    }
-
-    try {
-      await VoiceService.startRecording();
-      if (!mounted) {
-        return;
-      }
-      _setStatePreservingScroll(() => _isRecording = true);
-      Future<void>.delayed(const Duration(seconds: 30), () async {
-        if (_isRecording && mounted) {
-          await _toggleRecording();
-        }
-      });
-    } catch (_) {
-      if (!mounted) {
-        return;
-      }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(AppLocalizations.of(context).reminderSnackMicPermission)),
-      );
-    }
-  }
-
-  Future<void> _previewRecording() async {
-    if (_recordingPath == null || _recordingPath!.isEmpty) {
-      return;
-    }
-    await VoiceService.play(voicePath: _recordingPath);
   }
 
   Future<void> _pickRemindOffset() async {
@@ -441,62 +401,25 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
     });
   }
 
-  Widget _buildVoiceModeButton({
-    required String label,
-    required _VoiceRemindMode mode,
-  }) {
-    final bool selected = _voiceRemindMode == mode;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () => _selectVoiceRemindMode(mode),
-        borderRadius: BorderRadius.circular(10),
-        child: Ink(
-          decoration: BoxDecoration(
-            color: selected ? AppTheme.primaryColor : AppTheme.cardColor,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: selected ? AppTheme.primaryColor : const Color(0xFFE5E5EA),
-              width: selected ? 1.5 : 1,
-            ),
-          ),
-          child: Container(
-            alignment: Alignment.center,
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                color: selected ? Colors.white : AppTheme.textPrimaryColor,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _buildVoiceModeSelector() {
     final AppLocalizations l10n = AppLocalizations.of(context);
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-      child: Row(
-        children: <Widget>[
-          Expanded(
-            child: _buildVoiceModeButton(
+      child: Center(
+        child: AppUnderlineTabControl<_VoiceRemindMode>(
+          options: <AppSegmentOption<_VoiceRemindMode>>[
+            AppSegmentOption(
+              value: _VoiceRemindMode.textAndPreset,
               label: l10n.reminderVoiceModeText,
-              mode: _VoiceRemindMode.textAndPreset,
             ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: _buildVoiceModeButton(
+            AppSegmentOption(
+              value: _VoiceRemindMode.record,
               label: l10n.reminderVoiceModeRecord,
-              mode: _VoiceRemindMode.record,
             ),
-          ),
-        ],
+          ],
+          selected: _voiceRemindMode,
+          onChanged: _selectVoiceRemindMode,
+        ),
       ),
     );
   }
@@ -607,6 +530,7 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
     }
 
     final String title = _titleController.text.trim();
+    final String notes = _notesController.text.trim();
     final DateTime? finalRemindAt = _computedRemindAt;
     final String? remindText = _voiceRemindEnabled &&
             _voiceRemindMode == _VoiceRemindMode.textAndPreset
@@ -650,6 +574,7 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
             voiceId: voiceId,
             voicePath: voicePath,
             isCustomVoice: isCustomVoice,
+            notes: notes.isEmpty ? null : notes,
           );
     } else {
       await ref.read(reminderListProvider.notifier).addFlexibleTodo(
@@ -667,6 +592,7 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
             voiceId: voiceId,
             voicePath: voicePath,
             isCustomVoice: isCustomVoice,
+            notes: notes.isEmpty ? null : notes,
           );
     }
 
@@ -732,7 +658,6 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
                         label: l10n.reminderFieldContent,
                         controller: _titleController,
                         hintText: l10n.todoHintContent,
-                        showDivider: false,
                         textInputAction: TextInputAction.next,
                         validator: (String? value) {
                           if ((value ?? '').trim().isEmpty) {
@@ -741,6 +666,16 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
                           return null;
                         },
                         onChanged: (_) => setState(() {}),
+                      ),
+                      AppDetailTextField(
+                        icon: Icons.notes_outlined,
+                        iconColor: AppTheme.secondaryLabelColor,
+                        label: l10n.reminderFieldNotes,
+                        controller: _notesController,
+                        hintText: l10n.reminderHintNotes,
+                        maxLines: 2,
+                        showDivider: false,
+                        textInputAction: TextInputAction.next,
                       ),
                     ],
                   ),
@@ -982,30 +917,12 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
                             ),
                           ] else
                             Padding(
-                              padding: const EdgeInsets.all(14),
-                              child: Column(
-                                children: <Widget>[
-                                  SizedBox(
-                                    width: double.infinity,
-                                    child: FilledButton.icon(
-                                      onPressed: _toggleRecording,
-                                      icon: Icon(_isRecording ? Icons.stop : Icons.mic),
-                                      label: Text(_isRecording ? l10n.reminderRecordStop : l10n.reminderRecordStart),
-                                    ),
-                                  ),
-                                  if (_recordingPath != null &&
-                                      _recordingPath!.isNotEmpty) ...<Widget>[
-                                    const SizedBox(height: 10),
-                                    SizedBox(
-                                      width: double.infinity,
-                                      child: OutlinedButton.icon(
-                                        onPressed: _previewRecording,
-                                        icon: const Icon(Icons.play_arrow_rounded),
-                                        label: Text(l10n.reminderPreviewRecording),
-                                      ),
-                                    ),
-                                  ],
-                                ],
+                              padding: const EdgeInsets.fromLTRB(14, 8, 14, 14),
+                              child: VoiceRecordPanel(
+                                recordingPath: _recordingPath,
+                                onRecordingPathChanged: (String? path) {
+                                  _setStatePreservingScroll(() => _recordingPath = path);
+                                },
                               ),
                             ),
                         ],

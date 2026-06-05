@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:audioplayers/audioplayers.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 
@@ -20,9 +21,16 @@ class VoiceOption {
   final bool isCustom;
 }
 
+enum MicrophonePermissionStatus {
+  granted,
+  denied,
+}
+
 class VoiceService {
   static final AudioPlayer _audioPlayer = AudioPlayer();
   static final AudioRecorder _recorder = AudioRecorder();
+  static final FlutterTts _tts = FlutterTts();
+  static bool _ttsReady = false;
 
   static const List<VoiceOption> presetVoices = <VoiceOption>[
     VoiceOption(id: 'default', name: 'Default Voice'),
@@ -46,10 +54,21 @@ class VoiceService {
     return voiceDir;
   }
 
+  static Future<MicrophonePermissionStatus> ensureRecordingPermission() async {
+    if (await _recorder.hasPermission(request: false)) {
+      return MicrophonePermissionStatus.granted;
+    }
+    final bool granted = await _recorder.hasPermission(request: true);
+    if (granted) {
+      return MicrophonePermissionStatus.granted;
+    }
+    return MicrophonePermissionStatus.denied;
+  }
+
   static Future<String> startRecording() async {
-    final bool hasPermission = await _recorder.hasPermission();
-    if (!hasPermission) {
-      throw Exception('Microphone permission denied');
+    final MicrophonePermissionStatus status = await ensureRecordingPermission();
+    if (status != MicrophonePermissionStatus.granted) {
+      throw StateError('Microphone permission denied');
     }
     final Directory voiceDir = await _voiceDir();
     final String path =
@@ -69,23 +88,65 @@ class VoiceService {
     return _recorder.stop();
   }
 
+  static Future<void> _ensureTts() async {
+    if (_ttsReady) {
+      return;
+    }
+    await _tts.setLanguage('zh-CN');
+    await _tts.awaitSpeakCompletion(true);
+    _ttsReady = true;
+  }
+
+  static Future<void> _applyPresetVoice(String? voiceId) async {
+    switch (voiceId) {
+      case 'warm_female':
+        await _tts.setPitch(1.1);
+        await _tts.setSpeechRate(0.45);
+        return;
+      case 'calm_male':
+        await _tts.setPitch(0.85);
+        await _tts.setSpeechRate(0.42);
+        return;
+      default:
+        await _tts.setPitch(1.0);
+        await _tts.setSpeechRate(0.45);
+    }
+  }
+
+  static Future<void> _playPresetVoice({
+    required String? voiceId,
+    required String text,
+  }) async {
+    await _ensureTts();
+    await _audioPlayer.stop();
+    await _applyPresetVoice(voiceId);
+    await _tts.speak(text);
+  }
+
   static Future<void> play({
     String? voicePath,
     String? voiceId,
+    String? text,
   }) async {
-    if (voicePath != null && voicePath.isNotEmpty) {
+    if (voicePath != null && voicePath.isNotEmpty && File(voicePath).existsSync()) {
+      await _tts.stop();
       await _audioPlayer.play(DeviceFileSource(voicePath));
       return;
     }
 
-    // Preset playback placeholder: keep behavior stable without bundled assets yet.
-    // ignore: avoid_print
-    print('Playing preset voice: ${voiceId ?? 'default'}');
+    final String speech = text?.trim() ?? '';
+    if (speech.isNotEmpty) {
+      await _playPresetVoice(voiceId: voiceId, text: speech);
+    }
   }
 
   static Future<void> stop() async {
     await _audioPlayer.stop();
+    await _tts.stop();
   }
+
+  static Stream<void> get onPlaybackComplete =>
+      _audioPlayer.onPlayerComplete.map((_) {});
 
   static Future<List<VoiceOption>> loadRecordings() async {
     final Directory dir = await _voiceDir();

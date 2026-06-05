@@ -41,8 +41,16 @@ class NotificationService {
 
     const AndroidInitializationSettings androidSettings =
         AndroidInitializationSettings('@mipmap/ic_launcher');
-    const DarwinInitializationSettings iosSettings =
-        DarwinInitializationSettings();
+    const DarwinInitializationSettings iosSettings = DarwinInitializationSettings(
+      requestAlertPermission: false,
+      requestBadgePermission: false,
+      requestSoundPermission: false,
+      defaultPresentAlert: true,
+      defaultPresentSound: true,
+      defaultPresentBadge: true,
+      defaultPresentBanner: true,
+      defaultPresentList: true,
+    );
 
     const InitializationSettings settings = InitializationSettings(
       android: androidSettings,
@@ -96,7 +104,12 @@ class NotificationService {
     }
   }
 
-  static String notificationBody(Reminder reminder) {
+  static   String notificationBody(Reminder reminder) {
+    if (reminder.voiceRemindEnabled &&
+        (reminder.voicePath?.isNotEmpty == true ||
+            reminder.remindText?.trim().isNotEmpty == true)) {
+      return AppLocalizationsBinding.instance.notificationTapToPlayVoice;
+    }
     if (reminder.remindText?.trim().isNotEmpty == true) {
       return reminder.remindText!.trim();
     }
@@ -343,7 +356,13 @@ class NotificationService {
       importance: Importance.high,
       priority: Priority.high,
     );
-    const DarwinNotificationDetails iosDetails = DarwinNotificationDetails();
+    const DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
+      presentAlert: true,
+      presentSound: true,
+      presentBadge: true,
+      presentBanner: true,
+      presentList: true,
+    );
     const NotificationDetails details = NotificationDetails(
       android: androidDetails,
       iOS: iosDetails,

@@ -22,6 +22,7 @@ class VoiceRemindPlayback {
     await VoiceService.play(
       voicePath: reminder.voicePath,
       voiceId: resolveVoiceId(reminder),
+      text: reminder.remindText ?? reminder.title,
     );
   }
 }

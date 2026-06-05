@@ -202,7 +202,7 @@ class ReminderTimeRules {
         return l10n.remindPreviewMonthly(days.join(separator), time);
       case 'once':
       default:
-        return l10n.remindPreviewOnce(DateTimeUtils.formatDateTime(remindAt));
+        return l10n.remindPreviewOnce(DateTimeUtils.formatCardDateTime(remindAt));
     }
   }
 

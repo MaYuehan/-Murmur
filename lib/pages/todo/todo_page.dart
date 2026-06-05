@@ -11,6 +11,7 @@ import 'package:murmur/providers/todo_display_settings_provider.dart';
 import 'package:murmur/widgets/app_date_picker.dart';
 import 'package:murmur/widgets/app_slidable_action_button.dart';
 import 'package:murmur/widgets/app_ui.dart';
+import 'package:murmur/pages/todo/todo_sub_items_page.dart';
 import 'package:murmur/widgets/create_todo_sheet.dart';
 
 class TodoPage extends ConsumerStatefulWidget {
@@ -35,9 +36,9 @@ class _TodoPageState extends ConsumerState<TodoPage> {
     }
     final AppLocalizations l10n = AppLocalizations.of(context);
     if (linked!.isAllDay) {
-      return '${DateTimeUtils.formatDate(linked.scheduledTime!)} ${l10n.reminderAllDay}';
+      return '${DateTimeUtils.formatCardDate(linked.scheduledTime!)} ${l10n.reminderAllDay}';
     }
-    return DateTimeUtils.formatDateTime(linked.scheduledTime!);
+    return DateTimeUtils.formatCardDateTime(linked.scheduledTime!);
   }
 
   Future<void> _createTaskManually() async {
@@ -92,6 +93,14 @@ class _TodoPageState extends ConsumerState<TodoPage> {
 
   Future<void> _editTodo(Reminder reminder) async {
     await CreateTodoSheet.show(context, editingReminder: reminder);
+  }
+
+  Future<void> _openSubItems(Reminder reminder) async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (BuildContext context) => TodoSubItemsPage(todoId: reminder.id),
+      ),
+    );
   }
 
   Future<bool?> _confirmUnlinkFromCalendar() {
@@ -305,8 +314,14 @@ class _TodoPageState extends ConsumerState<TodoPage> {
         key: ValueKey<String>('todo_${reminder.id}'),
         endActionPane: ActionPane(
           motion: const DrawerMotion(),
-          extentRatio: 0.36,
+          extentRatio: 0.48,
           children: <Widget>[
+            AppSlidableActionButton(
+              onPressed: () => _openSubItems(reminder),
+              icon: Icons.checklist_outlined,
+              iconColor: AppTheme.primaryColor,
+              backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.18),
+            ),
             AppSlidableActionButton(
               onPressed: () => _onCalendarAction(reminder),
               icon: reminder.isSyncedToCalendar
@@ -335,6 +350,7 @@ class _TodoPageState extends ConsumerState<TodoPage> {
           calendarScheduleLabel: _calendarScheduleLabel(reminder, reminderNotifier),
           onTitleCommitted: (String title) => _commitTodoTitle(reminder, title),
           onCheckChanged: (bool? checked) => _toggleComplete(reminder, checked),
+          onSubItemsTap: reminder.hasSubItems ? () => _openSubItems(reminder) : null,
         ),
       ),
     );
@@ -540,6 +556,8 @@ class _TodoPageState extends ConsumerState<TodoPage> {
                               _commitTodoTitle(reminder, title),
                           onCheckChanged: (bool? checked) =>
                               _toggleComplete(reminder, checked),
+                          onSubItemsTap:
+                              reminder.hasSubItems ? () => _openSubItems(reminder) : null,
                         ),
                       ),
                     );
@@ -905,6 +923,7 @@ class _TodoCard extends StatefulWidget {
     this.calendarScheduleLabel,
     this.onTitleCommitted,
     this.onCheckChanged,
+    this.onSubItemsTap,
   });
 
   final Reminder reminder;
@@ -912,6 +931,7 @@ class _TodoCard extends StatefulWidget {
   final String? calendarScheduleLabel;
   final ValueChanged<String>? onTitleCommitted;
   final ValueChanged<bool?>? onCheckChanged;
+  final VoidCallback? onSubItemsTap;
 
   @override
   State<_TodoCard> createState() => _TodoCardState();
@@ -921,6 +941,7 @@ class _TodoCardState extends State<_TodoCard> {
   late final TextEditingController _titleController;
   late final FocusNode _titleFocusNode;
   bool _editingTitle = false;
+  bool _notesExpanded = false;
 
   @override
   void initState() {
@@ -935,6 +956,9 @@ class _TodoCardState extends State<_TodoCard> {
     super.didUpdateWidget(oldWidget);
     if (!_editingTitle && oldWidget.reminder.title != widget.reminder.title) {
       _titleController.text = widget.reminder.title;
+    }
+    if (oldWidget.reminder.notes != widget.reminder.notes) {
+      _notesExpanded = false;
     }
   }
 
@@ -996,42 +1020,234 @@ class _TodoCardState extends State<_TodoCard> {
         );
   }
 
+  Widget _buildNotes(BuildContext context, String notes) {
+    final TextStyle style = Theme.of(context).textTheme.bodySmall?.copyWith(
+          color: AppTheme.secondaryLabelColor,
+        ) ??
+        const TextStyle(color: AppTheme.secondaryLabelColor);
+
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        final TextPainter collapsedPainter = TextPainter(
+          text: TextSpan(text: notes, style: style),
+          maxLines: 1,
+          textDirection: Directionality.of(context),
+        )..layout(maxWidth: constraints.maxWidth - 20);
+        final bool canExpand =
+            notes.contains('\n') || collapsedPainter.didExceedMaxLines;
+
+        if (!canExpand) {
+          return Text(notes, style: style);
+        }
+
+        return GestureDetector(
+          onTap: () => setState(() => _notesExpanded = !_notesExpanded),
+          behavior: HitTestBehavior.opaque,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Expanded(
+                child: Text(
+                  notes,
+                  maxLines: _notesExpanded ? null : 1,
+                  overflow: _notesExpanded ? TextOverflow.visible : TextOverflow.ellipsis,
+                  style: style,
+                ),
+              ),
+              Icon(
+                _notesExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                size: 16,
+                color: AppTheme.secondaryLabelColor,
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  bool _isDeadlineOverdue(Reminder reminder) {
+    if (!reminder.hasDeadline || reminder.isCompleted || reminder.deadlineAt == null) {
+      return false;
+    }
+    return DateTimeUtils.calendarDaysUntil(reminder.deadlineAt!) < 0;
+  }
+
+  Color _deadlineAccentColor(Reminder reminder) {
+    if (reminder.isCompleted) {
+      return AppTheme.secondaryLabelColor;
+    }
+    if (!reminder.hasDeadline || reminder.deadlineAt == null) {
+      return AppTheme.deadlineColor;
+    }
+    final int days = DateTimeUtils.calendarDaysUntil(reminder.deadlineAt!);
+    if (days <= 0) {
+      return AppTheme.destructiveColor;
+    }
+    if (days == 1) {
+      return AppTheme.primaryColor;
+    }
+    return AppTheme.textPrimaryColor;
+  }
+
+  Color _deadlineScheduleDateColor(Reminder reminder) {
+    if (reminder.isCompleted) {
+      return AppTheme.secondaryLabelColor;
+    }
+    if (!reminder.hasDeadline || reminder.deadlineAt == null) {
+      return AppTheme.deadlineColor;
+    }
+    final int days = DateTimeUtils.calendarDaysUntil(reminder.deadlineAt!);
+    if (days <= 0) {
+      return AppTheme.destructiveColor;
+    }
+    if (days == 1) {
+      return AppTheme.primaryColor;
+    }
+    return AppTheme.secondaryLabelColor;
+  }
+
+  TextStyle? _scheduleDateTextStyle(
+    BuildContext context, {
+    required Color color,
+    TextDecoration? decoration,
+  }) {
+    return Theme.of(context).textTheme.labelSmall?.copyWith(
+          color: color,
+          decoration: decoration,
+        );
+  }
+
+  Widget _buildDeadlineCountdown(BuildContext context, AppLocalizations l10n) {
+    final Reminder reminder = widget.reminder;
+    if (!reminder.hasDeadline || reminder.isCompleted || reminder.deadlineAt == null) {
+      return const SizedBox.shrink();
+    }
+
+    final int days = DateTimeUtils.calendarDaysUntil(reminder.deadlineAt!);
+    final String label;
+    if (days < 0) {
+      label = l10n.todoDeadlineOverdue(-days);
+    } else if (days == 0) {
+      label = l10n.todoDeadlineDueToday;
+    } else if (days == 1) {
+      label = l10n.todoDeadlineDueTomorrow;
+    } else {
+      label = l10n.todoDeadlineDaysLeft(days);
+    }
+
+    return Text(
+      label,
+      textAlign: TextAlign.center,
+      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+            color: _deadlineAccentColor(reminder).withValues(alpha: 0.88),
+            fontWeight: FontWeight.w700,
+            fontSize: 16,
+          ),
+    );
+  }
+
+  Widget _buildSubItemsShortcut(BuildContext context, AppLocalizations l10n) {
+    final Reminder reminder = widget.reminder;
+    final Color accentColor = reminder.isCompleted
+        ? AppTheme.secondaryLabelColor
+        : AppTheme.primaryColor;
+
+    return Tooltip(
+      message: l10n.todoSubItemsPageTitle,
+      child: Material(
+        color: accentColor.withValues(alpha: reminder.isCompleted ? 0.08 : 0.14),
+        borderRadius: BorderRadius.circular(8),
+        child: InkWell(
+          onTap: widget.onSubItemsTap,
+          borderRadius: BorderRadius.circular(8),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Icon(Icons.checklist_outlined, size: 15, color: accentColor),
+                const SizedBox(width: 4),
+                Text(
+                  l10n.todoSubItemsProgress(
+                    reminder.subItemCompletedCount,
+                    reminder.subItems.length,
+                  ),
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: accentColor,
+                        fontWeight: FontWeight.w600,
+                      ),
+                ),
+                Icon(Icons.chevron_right, size: 16, color: accentColor),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final Reminder reminder = widget.reminder;
     final TextStyle? titleStyle = _titleTextStyle(context);
 
+    final bool isOverdue = _isDeadlineOverdue(reminder);
+
+    final bool showCountdown =
+        reminder.hasDeadline && !reminder.isCompleted;
+    final bool showSubItems =
+        reminder.hasSubItems && widget.onSubItemsTap != null;
+    final bool showSubItemsInColumn = showSubItems && reminder.hasDeadline;
+    final bool showSubItemsOnRight = showSubItems && !reminder.hasDeadline;
+
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(AppTheme.groupedRadius),
-        boxShadow: <BoxShadow>[
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        border: isOverdue
+            ? Border.all(
+                color: AppTheme.destructiveColor.withValues(alpha: 0.5),
+                width: 1,
+              )
+            : null,
+        boxShadow: isOverdue
+            ? <BoxShadow>[
+                BoxShadow(
+                  color: AppTheme.destructiveColor.withValues(alpha: 0.2),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ]
+            : <BoxShadow>[
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, 2),
+                ),
+              ],
       ),
       child: AppGroupedSection(
         children: <Widget>[
           Padding(
             padding: const EdgeInsets.fromLTRB(6, 4, 10, 4),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
+            child: Stack(
               children: <Widget>[
-                Checkbox(
-                  value: reminder.isCompleted,
-                  onChanged: widget.onCheckChanged,
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  visualDensity: VisualDensity.compact,
-                ),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 10, bottom: 10),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: <Widget>[
+                    Checkbox(
+                      value: reminder.isCompleted,
+                      onChanged: widget.onCheckChanged,
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 10, bottom: 10),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
                         _editingTitle
                             ? TextField(
                                 controller: _titleController,
@@ -1054,6 +1270,14 @@ class _TodoCardState extends State<_TodoCard> {
                                   style: titleStyle,
                                 ),
                               ),
+                        if (showSubItemsInColumn) ...<Widget>[
+                          const SizedBox(height: 6),
+                          _buildSubItemsShortcut(context, l10n),
+                        ],
+                        if (reminder.notes?.trim().isNotEmpty == true) ...<Widget>[
+                          const SizedBox(height: 4),
+                          _buildNotes(context, reminder.notes!.trim()),
+                        ],
                         if (reminder.hasDeadline) ...<Widget>[
                             const SizedBox(height: 4),
                             Row(
@@ -1070,25 +1294,27 @@ class _TodoCardState extends State<_TodoCard> {
                                 ],
                                 Icon(
                                   Icons.flag_outlined,
-                                  size: 13,
+                                  size: 12,
                                   color: reminder.isCompleted
                                       ? AppTheme.secondaryLabelColor
                                       : AppTheme.deadlineColor,
                                 ),
                                 const SizedBox(width: 4),
-                                Text(
-                                  l10n.todoDeadlineLabel(
-                                    DateTimeUtils.formatDateTime(reminder.deadlineAt!),
+                                Expanded(
+                                  child: Text(
+                                    l10n.todoDeadlineLabel(
+                                      DateTimeUtils.formatCardDateTime(reminder.deadlineAt!),
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: _scheduleDateTextStyle(
+                                      context,
+                                      color: _deadlineScheduleDateColor(reminder),
+                                      decoration: reminder.isCompleted
+                                          ? TextDecoration.lineThrough
+                                          : TextDecoration.none,
+                                    ),
                                   ),
-                                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                        color: reminder.isCompleted
-                                            ? AppTheme.secondaryLabelColor
-                                            : AppTheme.deadlineColor,
-                                        fontWeight: FontWeight.w600,
-                                        decoration: reminder.isCompleted
-                                            ? TextDecoration.lineThrough
-                                            : TextDecoration.none,
-                                      ),
                                 ),
                               ],
                             ),
@@ -1106,13 +1332,18 @@ class _TodoCardState extends State<_TodoCard> {
                                 ),
                                 if (widget.calendarScheduleLabel != null) ...<Widget>[
                                   const SizedBox(width: 4),
-                                  Text(
-                                    widget.calendarScheduleLabel!,
-                                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                          color: reminder.isCompleted
-                                              ? AppTheme.secondaryLabelColor
-                                              : AppTheme.primaryColor,
-                                        ),
+                                  Expanded(
+                                    child: Text(
+                                      widget.calendarScheduleLabel!,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: _scheduleDateTextStyle(
+                                        context,
+                                        color: reminder.isCompleted
+                                            ? AppTheme.secondaryLabelColor
+                                            : AppTheme.primaryColor,
+                                      ),
+                                    ),
                                   ),
                                 ],
                               ],
@@ -1136,17 +1367,21 @@ class _TodoCardState extends State<_TodoCard> {
                                   ),
                                 ],
                                 const SizedBox(width: 4),
-                                Text(
-                                  reminder.remindAt != null
-                                      ? ReminderTimeRules.remindPreviewLabel(
-                                          remindAt: reminder.remindAt,
-                                          frequency: reminder.remindFrequency,
-                                          repeatDays: reminder.remindRepeatDays,
-                                        )
-                                      : l10n.todoReminderSet,
-                                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                        color: AppTheme.secondaryLabelColor,
-                                      ),
+                                Expanded(
+                                  child: Text(
+                                    reminder.remindAt != null
+                                        ? ReminderTimeRules.remindPreviewLabel(
+                                            remindAt: reminder.remindAt,
+                                            frequency: reminder.remindFrequency,
+                                            repeatDays: reminder.remindRepeatDays,
+                                          )
+                                        : l10n.todoReminderSet,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                          color: AppTheme.secondaryLabelColor,
+                                        ),
+                                  ),
                                 ),
                               ],
                             ),
@@ -1162,6 +1397,24 @@ class _TodoCardState extends State<_TodoCard> {
                     ),
                   ),
                 ),
+                    if (showSubItemsOnRight)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 4),
+                        child: _buildSubItemsShortcut(context, l10n),
+                      ),
+                    if (showCountdown) const SizedBox(width: 44),
+                  ],
+                ),
+                if (showCountdown)
+                  Positioned(
+                    right: 0,
+                    top: 0,
+                    bottom: 0,
+                    width: 44,
+                    child: Center(
+                      child: _buildDeadlineCountdown(context, l10n),
+                    ),
+                  ),
               ],
             ),
           ),

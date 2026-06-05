@@ -7,14 +7,16 @@ class AppGroupedSection extends StatelessWidget {
   const AppGroupedSection({
     super.key,
     required this.children,
+    this.backgroundColor,
   });
 
   final List<Widget> children;
+  final Color? backgroundColor;
 
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: AppTheme.cardColor,
+      color: backgroundColor ?? AppTheme.cardColor,
       borderRadius: BorderRadius.circular(AppTheme.groupedRadius),
       clipBehavior: Clip.antiAlias,
       child: Column(

@@ -71,6 +71,7 @@ class _ReminderDetailPageState extends ConsumerState<ReminderDetailPage> {
     await VoiceService.play(
       voicePath: reminder.voicePath,
       voiceId: _resolveVoiceId(reminder),
+      text: reminder.remindText ?? reminder.title,
     );
     if (!mounted) {
       return;

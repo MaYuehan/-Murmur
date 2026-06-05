@@ -13,6 +13,7 @@ import 'package:murmur/widgets/inline_date_picker.dart';
 import 'package:murmur/widgets/inline_datetime_picker.dart';
 import 'package:murmur/widgets/inline_repeat_days_picker.dart';
 import 'package:murmur/widgets/inline_time_picker.dart';
+import 'package:murmur/widgets/voice_record_panel.dart';
 import 'package:murmur/widgets/inline_time_range_picker.dart';
 
 enum _VoiceRemindMode { textAndPreset, record }
@@ -299,50 +300,6 @@ class _CreateReminderPageState extends ConsumerState<CreateReminderPage> {
       return;
     }
     _setStatePreservingScroll(() => _remindTextController.text = title);
-  }
-
-  Future<void> _toggleRecording() async {
-    if (_isRecording) {
-      final String? path = await VoiceService.stopRecording();
-      if (!mounted) {
-        return;
-      }
-      _setStatePreservingScroll(() {
-        _isRecording = false;
-        if (path != null && path.isNotEmpty) {
-          _recordingPath = path;
-        }
-      });
-      return;
-    }
-
-    try {
-      await VoiceService.startRecording();
-      if (!mounted) {
-        return;
-      }
-      _setStatePreservingScroll(() => _isRecording = true);
-
-      Future<void>.delayed(const Duration(seconds: 30), () async {
-        if (_isRecording && mounted) {
-          await _toggleRecording();
-        }
-      });
-    } catch (_) {
-      if (!mounted) {
-        return;
-      }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(AppLocalizations.of(context).reminderSnackMicPermission)),
-      );
-    }
-  }
-
-  Future<void> _previewRecording() async {
-    if (_recordingPath == null || _recordingPath!.isEmpty) {
-      return;
-    }
-    await VoiceService.play(voicePath: _recordingPath);
   }
 
   bool _isVoiceRemindReady() {
@@ -645,53 +602,25 @@ class _CreateReminderPageState extends ConsumerState<CreateReminderPage> {
     });
   }
 
-  Widget _buildVoiceModeButton({
-    required String label,
-    required _VoiceRemindMode mode,
-  }) {
-    final bool selected = _voiceRemindMode == mode;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () => _selectVoiceRemindMode(mode),
-        borderRadius: BorderRadius.circular(10),
-        child: Ink(
-          decoration: BoxDecoration(
-            color: selected ? AppTheme.primaryColor : AppTheme.cardColor,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: selected ? AppTheme.primaryColor : const Color(0xFFE5E5EA),
-              width: selected ? 1.5 : 1,
-            ),
-          ),
-          child: Container(
-            alignment: Alignment.center,
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                color: selected ? Colors.white : AppTheme.textPrimaryColor,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _buildVoiceModeSelector() {
     final AppLocalizations l10n = AppLocalizations.of(context);
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: <Widget>[
-          Expanded(child: _buildVoiceModeButton(label: l10n.reminderVoiceModeText, mode: _VoiceRemindMode.textAndPreset)),
-          const SizedBox(width: 10),
-          Expanded(child: _buildVoiceModeButton(label: l10n.reminderVoiceModeRecord, mode: _VoiceRemindMode.record)),
-        ],
+      child: Center(
+        child: AppUnderlineTabControl<_VoiceRemindMode>(
+          options: <AppSegmentOption<_VoiceRemindMode>>[
+            AppSegmentOption(
+              value: _VoiceRemindMode.textAndPreset,
+              label: l10n.reminderVoiceModeText,
+            ),
+            AppSegmentOption(
+              value: _VoiceRemindMode.record,
+              label: l10n.reminderVoiceModeRecord,
+            ),
+          ],
+          selected: _voiceRemindMode,
+          onChanged: _selectVoiceRemindMode,
+        ),
       ),
     );
   }
@@ -1052,30 +981,15 @@ class _CreateReminderPageState extends ConsumerState<CreateReminderPage> {
                         ),
                       ] else
                         Padding(
-                          padding: const EdgeInsets.all(14),
-                          child: Column(
-                            children: <Widget>[
-                              SizedBox(
-                                width: double.infinity,
-                                child: FilledButton.icon(
-                                  onPressed: _toggleRecording,
-                                  icon: Icon(_isRecording ? Icons.stop : Icons.mic),
-                                  label: Text(_isRecording ? l10n.reminderRecordStop : l10n.reminderRecordStart),
-                                ),
-                              ),
-                              if (_recordingPath != null &&
-                                  _recordingPath!.isNotEmpty) ...<Widget>[
-                                const SizedBox(height: 10),
-                                SizedBox(
-                                  width: double.infinity,
-                                  child: OutlinedButton.icon(
-                                    onPressed: _previewRecording,
-                                    icon: const Icon(Icons.play_arrow_rounded),
-                                    label: Text(l10n.reminderPreviewRecording),
-                                  ),
-                                ),
-                              ],
-                            ],
+                          padding: const EdgeInsets.fromLTRB(14, 8, 14, 14),
+                          child: VoiceRecordPanel(
+                            recordingPath: _recordingPath,
+                            onRecordingPathChanged: (String? path) {
+                              _setStatePreservingScroll(() => _recordingPath = path);
+                            },
+                            onRecordingStateChanged: (bool recording) {
+                              _setStatePreservingScroll(() => _isRecording = recording);
+                            },
                           ),
                         ),
                     ],

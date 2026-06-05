@@ -4,6 +4,7 @@ import 'package:murmur/core/utils/reminder_time_rules.dart';
 import 'package:murmur/core/utils/notification_service.dart';
 import 'package:murmur/core/utils/reminder_storage.dart';
 import 'package:murmur/models/reminder.dart';
+import 'package:murmur/models/todo_sub_item.dart';
 
 final initialReminderListProvider =
     Provider<List<Reminder>>((ref) => const <Reminder>[]);
@@ -14,7 +15,18 @@ final reminderListProvider =
 );
 
 class ReminderNotifier extends StateNotifier<List<Reminder>> {
-  ReminderNotifier(List<Reminder> initialState) : super(initialState);
+  ReminderNotifier(List<Reminder> initialState)
+      : super(_normalizeReminders(initialState));
+
+  static List<Reminder> _normalizeReminders(List<Reminder> reminders) {
+    return reminders
+        .map(
+          (Reminder reminder) => reminder.copyWith(
+            subItems: List<TodoSubItem>.from(reminder.subItems),
+          ),
+        )
+        .toList();
+  }
 
   bool _isLinkedCalendarEntry(Reminder reminder) {
     return reminder.linkedTodoId != null;
@@ -121,10 +133,13 @@ class ReminderNotifier extends StateNotifier<List<Reminder>> {
     String? voiceId,
     String? voicePath,
     bool isCustomVoice = false,
+    String? notes,
   }) async {
     final DateTime now = DateTime.now();
     final String todoId = now.microsecondsSinceEpoch.toString();
     String? calendarLinkedId;
+    final String? normalizedNotes =
+        notes?.trim().isEmpty == true ? null : notes?.trim();
 
     if (deadlineAt != null && syncToCalendar) {
       calendarLinkedId = '${todoId}_cal';
@@ -146,6 +161,7 @@ class ReminderNotifier extends StateNotifier<List<Reminder>> {
         voiceId: voiceId,
         voicePath: voicePath,
         isCustomVoice: isCustomVoice,
+        notes: normalizedNotes,
       );
     }
 
@@ -167,6 +183,7 @@ class ReminderNotifier extends StateNotifier<List<Reminder>> {
       voiceId: voiceId,
       voicePath: voicePath,
       isCustomVoice: isCustomVoice,
+      notes: normalizedNotes,
     );
   }
 
@@ -186,6 +203,7 @@ class ReminderNotifier extends StateNotifier<List<Reminder>> {
     String? voiceId,
     String? voicePath,
     bool isCustomVoice = false,
+    String? notes,
   }) async {
     final Reminder? existing = getReminderById(reminderId);
     if (existing == null || !existing.isFlexible) {
@@ -194,6 +212,8 @@ class ReminderNotifier extends StateNotifier<List<Reminder>> {
 
     String? calendarLinkedId = existing.calendarLinkedId;
     final bool wantsDeadlineCalendarSync = syncToCalendar && deadlineAt != null;
+    final String? normalizedNotes =
+        notes?.trim().isEmpty == true ? null : notes?.trim();
 
     if (calendarLinkedId != null) {
       final Reminder? linkedCalendar = getReminderById(calendarLinkedId);
@@ -253,6 +273,7 @@ class ReminderNotifier extends StateNotifier<List<Reminder>> {
         voiceId: voiceId,
         voicePath: voicePath,
         isCustomVoice: isCustomVoice,
+        notes: normalizedNotes,
       );
     }
 
@@ -277,6 +298,8 @@ class ReminderNotifier extends StateNotifier<List<Reminder>> {
       voiceId: voiceId,
       voicePath: voicePath,
       isCustomVoice: isCustomVoice,
+      notes: normalizedNotes,
+      clearNotes: normalizedNotes == null,
       syncLinkedCalendar: calendarLinkedId != null,
     );
   }
@@ -419,6 +442,7 @@ class ReminderNotifier extends StateNotifier<List<Reminder>> {
       voiceId: existing.voiceId,
       voicePath: existing.voicePath,
       isCustomVoice: existing.isCustomVoice,
+      notes: existing.notes,
     );
     await updateReminder(
       reminderId: reminderId,
@@ -433,13 +457,23 @@ class ReminderNotifier extends StateNotifier<List<Reminder>> {
   Future<void> setReminderCompleted({
     required String reminderId,
     required bool isCompleted,
+    bool syncSubItems = true,
   }) async {
     Reminder? updatedReminder;
     state = state.map((Reminder reminder) {
       if (reminder.id != reminderId) {
         return reminder;
       }
-      updatedReminder = reminder.copyWith(isCompleted: isCompleted);
+      List<TodoSubItem> subItems = reminder.subItems;
+      if (syncSubItems && subItems.isNotEmpty) {
+        subItems = subItems
+            .map((TodoSubItem item) => item.copyWith(isCompleted: isCompleted))
+            .toList();
+      }
+      updatedReminder = reminder.copyWith(
+        isCompleted: isCompleted,
+        subItems: subItems,
+      );
       return updatedReminder!;
     }).toList();
 
@@ -774,5 +808,123 @@ class ReminderNotifier extends StateNotifier<List<Reminder>> {
       return null;
     }
     return getReminderById(calendarReminder!.linkedTodoId!);
+  }
+
+  Future<void> addTodoSubItem({
+    required String parentId,
+    required String title,
+  }) async {
+    final Reminder? parent = getReminderById(parentId);
+    if (parent == null || !parent.isFlexible) {
+      return;
+    }
+    final String trimmed = title.trim();
+    if (trimmed.isEmpty) {
+      return;
+    }
+    final TodoSubItem item = TodoSubItem(
+      id: DateTime.now().microsecondsSinceEpoch.toString(),
+      title: trimmed,
+    );
+    await _saveTodoSubItems(
+      parentId: parentId,
+      subItems: <TodoSubItem>[...parent.subItems, item],
+    );
+  }
+
+  Future<void> updateTodoSubItemTitle({
+    required String parentId,
+    required String subItemId,
+    required String title,
+  }) async {
+    final Reminder? parent = getReminderById(parentId);
+    if (parent == null || !parent.isFlexible) {
+      return;
+    }
+    final String trimmed = title.trim();
+    if (trimmed.isEmpty) {
+      return;
+    }
+    final List<TodoSubItem> subItems = parent.subItems
+        .map((TodoSubItem item) {
+          if (item.id != subItemId) {
+            return item;
+          }
+          return item.copyWith(title: trimmed);
+        })
+        .toList();
+    await _saveTodoSubItems(parentId: parentId, subItems: subItems);
+  }
+
+  Future<void> toggleTodoSubItemCompleted({
+    required String parentId,
+    required String subItemId,
+    required bool isCompleted,
+  }) async {
+    final Reminder? parent = getReminderById(parentId);
+    if (parent == null || !parent.isFlexible) {
+      return;
+    }
+    final List<TodoSubItem> subItems = parent.subItems
+        .map((TodoSubItem item) {
+          if (item.id != subItemId) {
+            return item;
+          }
+          return item.copyWith(isCompleted: isCompleted);
+        })
+        .toList();
+    await _saveTodoSubItems(parentId: parentId, subItems: subItems);
+  }
+
+  Future<void> deleteTodoSubItem({
+    required String parentId,
+    required String subItemId,
+  }) async {
+    await deleteTodoSubItems(parentId: parentId, subItemIds: <String>[subItemId]);
+  }
+
+  Future<void> deleteTodoSubItems({
+    required String parentId,
+    required List<String> subItemIds,
+  }) async {
+    if (subItemIds.isEmpty) {
+      return;
+    }
+    final Reminder? parent = getReminderById(parentId);
+    if (parent == null || !parent.isFlexible) {
+      return;
+    }
+    final Set<String> ids = subItemIds.toSet();
+    final List<TodoSubItem> subItems =
+        parent.subItems.where((TodoSubItem item) => !ids.contains(item.id)).toList();
+    await _saveTodoSubItems(parentId: parentId, subItems: subItems);
+  }
+
+  Future<void> _saveTodoSubItems({
+    required String parentId,
+    required List<TodoSubItem> subItems,
+  }) async {
+    Reminder? updated;
+    state = state.map((Reminder reminder) {
+      if (reminder.id != parentId) {
+        return reminder;
+      }
+      updated = reminder.copyWith(subItems: subItems);
+      return updated!;
+    }).toList();
+    await ReminderStorage.saveReminders(state);
+
+    if (updated == null || subItems.isEmpty) {
+      return;
+    }
+
+    final bool allDone = updated!.allSubItemsCompleted;
+    if (allDone != updated!.isCompleted) {
+      await setReminderCompleted(
+        reminderId: parentId,
+        isCompleted: allDone,
+        syncSubItems: false,
+      );
+    }
   }
 }

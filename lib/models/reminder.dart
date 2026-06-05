@@ -1,3 +1,5 @@
+import 'package:murmur/models/todo_sub_item.dart';
+
 class Reminder {
   const Reminder({
     required this.id,
@@ -25,7 +27,8 @@ class Reminder {
     this.linkedTodoId,
     required this.isCompleted,
     required this.createdAt,
-  });
+    List<TodoSubItem>? subItems,
+  }) : _subItems = subItems;
 
   final String id;
   final String title;
@@ -52,11 +55,18 @@ class Reminder {
   final String? linkedTodoId;
   final bool isCompleted;
   final DateTime createdAt;
+  final List<TodoSubItem>? _subItems;
+
+  List<TodoSubItem> get subItems => _subItems ?? const <TodoSubItem>[];
 
   bool get isFixed => timeType == 'fixed' && scheduledTime != null;
   bool get isFlexible => timeType == 'flexible';
   bool get hasDeadline => deadlineAt != null;
   bool get isSyncedToCalendar => calendarLinkedId != null;
+  bool get hasSubItems => subItems.isNotEmpty;
+  int get subItemCompletedCount => subItems.where((TodoSubItem item) => item.isCompleted).length;
+  bool get allSubItemsCompleted =>
+      subItems.isNotEmpty && subItems.every((TodoSubItem item) => item.isCompleted);
 
   Reminder copyWith({
     String? id,
@@ -92,6 +102,7 @@ class Reminder {
     bool clearLinkedTodoId = false,
     bool? isCompleted,
     DateTime? createdAt,
+    List<TodoSubItem>? subItems,
   }) {
     return Reminder(
       id: id ?? this.id,
@@ -121,6 +132,7 @@ class Reminder {
       linkedTodoId: clearLinkedTodoId ? null : (linkedTodoId ?? this.linkedTodoId),
       isCompleted: isCompleted ?? this.isCompleted,
       createdAt: createdAt ?? this.createdAt,
+      subItems: subItems ?? _subItems,
     );
   }
 
@@ -151,6 +163,7 @@ class Reminder {
       'linkedTodoId': linkedTodoId,
       'isCompleted': isCompleted,
       'createdAt': createdAt.toIso8601String(),
+      'subItems': subItems.map((TodoSubItem item) => item.toMap()).toList(),
     };
   }
 
@@ -205,6 +218,11 @@ class Reminder {
       linkedTodoId: map['linkedTodoId'] as String?,
       isCompleted: map['isCompleted'] as bool,
       createdAt: DateTime.parse(map['createdAt'] as String),
+      subItems: (map['subItems'] as List<dynamic>?)
+              ?.whereType<Map<dynamic, dynamic>>()
+              .map(TodoSubItem.fromMap)
+              .toList() ??
+          const <TodoSubItem>[],
     );
   }
 }
