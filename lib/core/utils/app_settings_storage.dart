@@ -8,6 +8,7 @@ class AppSettingsStorage {
   static const String _showTodoCreatedDateKey = 'show_todo_created_date';
   static const String _weekStartsOnMondayKey = 'week_starts_on_monday';
   static const String _calendarViewPinnedKey = 'calendar_view_pinned';
+  static const String _todoSectionOrderKey = 'todo_section_order';
 
   static Future<void> init() async {
     await Hive.openBox<dynamic>(_boxName);
@@ -56,5 +57,17 @@ class AppSettingsStorage {
 
   static Future<void> setCalendarViewPinned(bool value) async {
     await _box.put(_calendarViewPinnedKey, value);
+  }
+
+  static List<String> get todoSectionOrder {
+    final List<dynamic>? raw = _box.get(_todoSectionOrderKey) as List<dynamic>?;
+    if (raw == null) {
+      return const <String>[];
+    }
+    return raw.cast<String>();
+  }
+
+  static Future<void> setTodoSectionOrder(List<String> order) async {
+    await _box.put(_todoSectionOrderKey, order);
   }
 }

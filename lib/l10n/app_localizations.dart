@@ -124,6 +124,7 @@ class AppLocalizations {
   String get todoGroupSection => _t('待办组', 'Task groups');
   String get todoAddGroup => _t('添加待办组', 'Add task group');
   String get todoGroupNameHint => _t('待办组名称', 'Group name');
+  String get todoGroupRenameTitle => _t('修改待办组名称', 'Rename task group');
   String get todoFieldGroup => _t('待办组', 'Task group');
   String get todoGroupNone => _t('无', 'None');
   String get todoGroupPickerTitle => _t('选择待办组', 'Select task group');

@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:murmur/core/theme/app_theme.dart';
+import 'package:murmur/core/utils/list_sort_order.dart';
 import 'package:murmur/core/utils/date_time_utils.dart';
 import 'package:murmur/core/utils/reminder_time_rules.dart';
 import 'package:murmur/l10n/app_localizations.dart';
@@ -10,6 +13,8 @@ import 'package:murmur/models/todo_group.dart';
 import 'package:murmur/providers/reminder_provider.dart';
 import 'package:murmur/providers/todo_display_settings_provider.dart';
 import 'package:murmur/providers/todo_group_provider.dart';
+import 'package:murmur/providers/todo_section_order_provider.dart';
+import 'package:murmur/core/utils/todo_section_id.dart';
 import 'package:murmur/widgets/app_date_picker.dart';
 import 'package:murmur/widgets/app_slidable_action_button.dart';
 import 'package:murmur/widgets/app_ui.dart';
@@ -42,6 +47,10 @@ class _TodoPageState extends ConsumerState<TodoPage> {
   final TextEditingController _newTodoGroupNameController = TextEditingController();
   final FocusNode _newTodoGroupFocusNode = FocusNode();
   final Map<String, bool> _expandedTodoGroups = <String, bool>{};
+  String? _editingTodoId;
+  String? _pendingFocusTodoId;
+  bool _pendingFocusSelectAll = true;
+  final Set<String> _draftTodoIds = <String>{};
 
   @override
   void dispose() {
@@ -85,6 +94,7 @@ class _TodoPageState extends ConsumerState<TodoPage> {
 
     final TodoGroup group =
         await ref.read(todoGroupListProvider.notifier).addTodoGroup(name);
+    await ref.read(todoSectionOrderProvider.notifier).appendGroupSection(group.id);
     _newTodoGroupNameController.clear();
     _newTodoGroupFocusNode.unfocus();
     if (!mounted) {
@@ -117,12 +127,203 @@ class _TodoPageState extends ConsumerState<TodoPage> {
       await notifier.clearTodoGroupMembership(group.id);
     }
     await ref.read(todoGroupListProvider.notifier).deleteTodoGroup(group.id);
+    await ref.read(todoSectionOrderProvider.notifier).removeGroupSection(group.id);
     if (!mounted) {
       return;
     }
     setState(() {
       _expandedTodoGroups.remove(group.id);
     });
+  }
+
+  Future<void> _renameTodoGroup(TodoGroup group) async {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    final TextEditingController controller = TextEditingController(text: group.name);
+    try {
+      final String? newName = await showDialog<String>(
+        context: context,
+        builder: (BuildContext dialogContext) {
+          return AlertDialog(
+            title: Text(l10n.todoGroupRenameTitle),
+            content: TextField(
+              controller: controller,
+              autofocus: true,
+              decoration: InputDecoration(
+                hintText: l10n.todoGroupNameHint,
+              ),
+              textInputAction: TextInputAction.done,
+              onSubmitted: (String value) {
+                Navigator.of(dialogContext).pop(value.trim());
+              },
+            ),
+            actions: <Widget>[
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: Text(l10n.commonCancel),
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.of(dialogContext).pop(controller.text.trim());
+                },
+                child: Text(l10n.commonSave),
+              ),
+            ],
+          );
+        },
+      );
+      if (newName == null || newName.isEmpty || !mounted || newName == group.name) {
+        return;
+      }
+      await ref.read(todoGroupListProvider.notifier).renameTodoGroup(
+            groupId: group.id,
+            name: newName,
+          );
+    } finally {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        controller.dispose();
+      });
+    }
+  }
+
+  Widget _buildReorderableSectionHeader({
+    required String sectionId,
+    required int sectionIndex,
+    required List<String> orderedSectionIds,
+    required List<TodoGroup> todoGroups,
+    required Widget child,
+  }) {
+    final double headerWidth =
+        MediaQuery.sizeOf(context).width - AppTheme.pagePadding * 2;
+    return LongPressDraggable<String>(
+      data: sectionId,
+      feedback: Material(
+        color: Colors.transparent,
+        child: SizedBox(
+          width: headerWidth,
+          child: Opacity(
+            opacity: 0.92,
+            child: child,
+          ),
+        ),
+      ),
+      childWhenDragging: Opacity(
+        opacity: 0.35,
+        child: child,
+      ),
+      child: DragTarget<String>(
+        onWillAcceptWithDetails: (DragTargetDetails<String> details) {
+          return details.data != sectionId;
+        },
+        onAcceptWithDetails: (DragTargetDetails<String> details) {
+          final int fromIndex = orderedSectionIds.indexOf(details.data);
+          if (fromIndex < 0 || fromIndex == sectionIndex) {
+            return;
+          }
+          ref.read(todoSectionOrderProvider.notifier).reorderSections(
+                fromIndex: fromIndex,
+                toIndex: sectionIndex,
+                groups: todoGroups,
+              );
+        },
+        builder: (
+          BuildContext context,
+          List<String?> candidateData,
+          List<dynamic> rejectedData,
+        ) {
+          final bool isDropTarget = candidateData.isNotEmpty;
+          return AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            decoration: isDropTarget
+                ? BoxDecoration(
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: AppTheme.primaryColor, width: 1.5),
+                  )
+                : null,
+            child: child,
+          );
+        },
+      ),
+    );
+  }
+
+  TodoGroup? _todoGroupForSectionId(String sectionId, List<TodoGroup> todoGroups) {
+    final String? groupId = groupIdFromSectionId(sectionId);
+    if (groupId == null) {
+      return null;
+    }
+    for (final TodoGroup group in todoGroups) {
+      if (group.id == groupId) {
+        return group;
+      }
+    }
+    return null;
+  }
+
+  Widget _buildReorderableTodoRow({
+    required Reminder reminder,
+    required int index,
+    required List<Reminder> todos,
+    required bool reorderEnabled,
+    required Widget child,
+  }) {
+    if (!reorderEnabled || _editingTodoId != null) {
+      return child;
+    }
+
+    final double rowWidth =
+        MediaQuery.sizeOf(context).width - AppTheme.pagePadding * 2;
+    return LongPressDraggable<String>(
+      data: reminder.id,
+      feedback: Material(
+        color: Colors.transparent,
+        child: SizedBox(
+          width: rowWidth,
+          child: Opacity(
+            opacity: 0.92,
+            child: child,
+          ),
+        ),
+      ),
+      childWhenDragging: Opacity(
+        opacity: 0.35,
+        child: child,
+      ),
+      child: DragTarget<String>(
+        onWillAcceptWithDetails: (DragTargetDetails<String> details) {
+          return details.data != reminder.id;
+        },
+        onAcceptWithDetails: (DragTargetDetails<String> details) {
+          final int fromIndex = todos.indexWhere(
+            (Reminder item) => item.id == details.data,
+          );
+          if (fromIndex < 0 || fromIndex == index) {
+            return;
+          }
+          ref.read(reminderListProvider.notifier).reorderFlexibleTodoInList(
+                listContext: todos,
+                fromIndex: fromIndex,
+                toIndex: index,
+              );
+        },
+        builder: (
+          BuildContext context,
+          List<String?> candidateData,
+          List<dynamic> rejectedData,
+        ) {
+          final bool isDropTarget = candidateData.isNotEmpty;
+          return AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            decoration: isDropTarget
+                ? BoxDecoration(
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: AppTheme.primaryColor, width: 1.5),
+                  )
+                : null,
+            child: child,
+          );
+        },
+      ),
+    );
   }
 
   Future<_DeleteTodoGroupChoice?> _confirmDeleteTodoGroup({
@@ -223,6 +424,140 @@ class _TodoPageState extends ConsumerState<TodoPage> {
 
   Future<void> _createTaskManually() async {
     await CreateTodoSheet.show(context);
+  }
+
+  bool _groupHasDraftTodo(String groupId) {
+    if (_draftTodoIds.isEmpty) {
+      return false;
+    }
+    final ReminderNotifier notifier = ref.read(reminderListProvider.notifier);
+    for (final String todoId in _draftTodoIds) {
+      final Reminder? todo = notifier.getReminderById(todoId);
+      if (todo?.todoGroupId == groupId) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  bool _normalHasDraftTodo() {
+    if (_draftTodoIds.isEmpty) {
+      return false;
+    }
+    final ReminderNotifier notifier = ref.read(reminderListProvider.notifier);
+    for (final String todoId in _draftTodoIds) {
+      final Reminder? todo = notifier.getReminderById(todoId);
+      if (todo != null && !todo.hasDeadline && todo.todoGroupId == null) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  void _beginInlineDraftEdit(String newTodoId) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _draftTodoIds.add(newTodoId);
+        _editingTodoId = newTodoId;
+        _pendingFocusTodoId = newTodoId;
+        _pendingFocusSelectAll = false;
+      });
+    });
+  }
+
+  Future<void> _createFirstTodoInGroup(TodoGroup group) async {
+    final String newTodoId = await ref.read(reminderListProvider.notifier).addFlexibleTodo(
+          title: '',
+          todoGroupId: group.id,
+          sortOrder: ListSortOrder.defaultNow(),
+        );
+    if (!mounted || newTodoId.isEmpty) {
+      return;
+    }
+    _beginInlineDraftEdit(newTodoId);
+  }
+
+  Future<void> _createTaskInGroupInline(
+    TodoGroup group,
+    List<Reminder> groupTodos,
+  ) async {
+    setState(() => _expandedTodoGroups[group.id] = true);
+    if (groupTodos.isEmpty) {
+      await _createFirstTodoInGroup(group);
+      return;
+    }
+    await _createTodoBelow(
+      afterReminder: groupTodos.last,
+      listContext: groupTodos,
+      index: groupTodos.length - 1,
+    );
+  }
+
+  Future<void> _createTaskInGroup(TodoGroup group, List<Reminder> groupTodos) async {
+    await _createTaskInGroupInline(group, groupTodos);
+  }
+
+  Future<void> _createDeadlineTask() async {
+    setState(() => _showDeadlineTodos = true);
+    await CreateTodoSheet.show(context, initialHasDeadline: true);
+  }
+
+  Future<void> _createFirstNormalTodo() async {
+    final String newTodoId = await ref.read(reminderListProvider.notifier).addFlexibleTodo(
+          title: '',
+          sortOrder: ListSortOrder.defaultNow(),
+        );
+    if (!mounted || newTodoId.isEmpty) {
+      return;
+    }
+    _beginInlineDraftEdit(newTodoId);
+  }
+
+  Future<void> _createNormalTaskInline(List<Reminder> pendingNormal) async {
+    setState(() => _showNormalTodos = true);
+    if (pendingNormal.isEmpty) {
+      await _createFirstNormalTodo();
+      return;
+    }
+    await _createTodoBelow(
+      afterReminder: pendingNormal.last,
+      listContext: pendingNormal,
+      index: pendingNormal.length - 1,
+    );
+  }
+
+  Future<void> _createNormalTask(List<Reminder> pendingNormal) async {
+    await _createNormalTaskInline(pendingNormal);
+  }
+
+  Widget _buildSectionAddTodoButton({
+    required VoidCallback onPressed,
+  }) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    return IconButton(
+      onPressed: onPressed,
+      tooltip: l10n.todoAdd,
+      visualDensity: VisualDensity.compact,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+      icon: Container(
+        width: 22,
+        height: 22,
+        decoration: const BoxDecoration(
+          color: AppTheme.primaryColor,
+          shape: BoxShape.circle,
+        ),
+        alignment: Alignment.center,
+        child: const Icon(
+          Icons.add,
+          size: 16,
+          color: Colors.white,
+        ),
+      ),
+    );
   }
 
   Future<bool?> _confirmRemoveFromCalendar({int syncedCount = 1}) {
@@ -410,6 +745,98 @@ class _TodoPageState extends ConsumerState<TodoPage> {
         );
   }
 
+  int _sortOrderForInsertAfter(List<Reminder> list, int index) {
+    final List<int> orders = list.map((Reminder item) => item.sortOrder).toList();
+    return ListSortOrder.forInsertAfter(orders, index);
+  }
+
+  void _startTodoTitleEdit(String todoId, {required bool selectAll}) {
+    setState(() {
+      _editingTodoId = todoId;
+      _pendingFocusTodoId = todoId;
+      _pendingFocusSelectAll = selectAll;
+    });
+  }
+
+  void _endTodoTitleEdit(String todoId) {
+    setState(() {
+      if (_editingTodoId == todoId) {
+        _editingTodoId = null;
+      }
+      if (_pendingFocusTodoId == todoId) {
+        _pendingFocusTodoId = null;
+      }
+    });
+  }
+
+  void _handleTodoFocusHandled(String todoId) {
+    if (_pendingFocusTodoId != todoId) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _pendingFocusTodoId != todoId) {
+        return;
+      }
+      setState(() => _pendingFocusTodoId = null);
+    });
+  }
+
+  Future<void> _discardDraftTodo(String todoId) async {
+    _draftTodoIds.remove(todoId);
+    await ref.read(reminderListProvider.notifier).deleteFlexibleTodo(
+          reminderId: todoId,
+        );
+    if (!mounted) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        if (_editingTodoId == todoId) {
+          _editingTodoId = null;
+        }
+        if (_pendingFocusTodoId == todoId) {
+          _pendingFocusTodoId = null;
+        }
+      });
+    });
+  }
+
+  Future<void> _createTodoBelow({
+    required Reminder afterReminder,
+    required List<Reminder> listContext,
+    required int index,
+  }) async {
+    setState(() {
+      _editingTodoId = null;
+      _pendingFocusTodoId = null;
+    });
+
+    final int sortOrder = _sortOrderForInsertAfter(listContext, index);
+    final String newTodoId = await ref.read(reminderListProvider.notifier).addFlexibleTodo(
+          title: '',
+          todoGroupId: afterReminder.todoGroupId,
+          deadlineAt: afterReminder.deadlineAt,
+          sortOrder: sortOrder,
+        );
+    if (!mounted) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _draftTodoIds.add(newTodoId);
+        _editingTodoId = newTodoId;
+        _pendingFocusTodoId = newTodoId;
+        _pendingFocusSelectAll = false;
+      });
+    });
+  }
+
   Future<bool?> _confirmClearCompleted(int count) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     return showDialog<bool>(
@@ -490,7 +917,9 @@ class _TodoPageState extends ConsumerState<TodoPage> {
     String keyPrefix = 'todo_connected',
     double bottomPadding = _todoGroupListBottomPadding,
     bool deleteOnly = false,
+    bool reorderEnabled = true,
   }) {
+    final bool canReorder = reorderEnabled && !deleteOnly;
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(AppTheme.groupedRadius),
@@ -505,25 +934,49 @@ class _TodoPageState extends ConsumerState<TodoPage> {
       child: AppGroupedSection(
         children: <Widget>[
           for (int index = 0; index < todos.length; index++) ...<Widget>[
-            _buildTodoSlidable(
+            _buildReorderableTodoRow(
               reminder: todos[index],
-              reminderNotifier: reminderNotifier,
-              keyPrefix: keyPrefix,
-              deleteOnly: deleteOnly,
-              child: _TodoCard(
+              index: index,
+              todos: todos,
+              reorderEnabled: canReorder,
+              child: _buildTodoSlidable(
+                reminder: todos[index],
+                reminderNotifier: reminderNotifier,
+                keyPrefix: keyPrefix,
+                deleteOnly: deleteOnly,
+                child: _TodoCard(
+                key: ValueKey<String>('todo_card_${todos[index].id}'),
                 reminder: todos[index],
                 showCreatedDate: showCreatedDate,
                 grouped: true,
+                inlineEditEnabled: !deleteOnly,
+                editing: _editingTodoId == todos[index].id,
+                requestFocus: _pendingFocusTodoId == todos[index].id,
+                selectAllOnFocus: _pendingFocusSelectAll,
+                isDraft: _draftTodoIds.contains(todos[index].id),
                 calendarScheduleLabel:
                     _calendarScheduleLabel(todos[index], reminderNotifier),
-                onTitleCommitted: (String title) =>
-                    _commitTodoTitle(todos[index], title),
+                onFocusHandled: () => _handleTodoFocusHandled(todos[index].id),
+                onEditStart: () =>
+                    _startTodoTitleEdit(todos[index].id, selectAll: true),
+                onEditEnd: () => _endTodoTitleEdit(todos[index].id),
+                onTitleSave: (String title) async {
+                  await _commitTodoTitle(todos[index], title);
+                  _draftTodoIds.remove(todos[index].id);
+                },
+                onCreateBelow: () => _createTodoBelow(
+                  afterReminder: todos[index],
+                  listContext: todos,
+                  index: index,
+                ),
+                onDiscardDraft: () => _discardDraftTodo(todos[index].id),
                 onCheckChanged: (bool? checked) =>
                     _toggleComplete(todos[index], checked),
                 onSubItemsTap: todos[index].hasSubItems
                     ? () => _openSubItems(todos[index])
                     : null,
               ),
+            ),
             ),
             if (index < todos.length - 1)
               const Divider(
@@ -597,6 +1050,7 @@ class _TodoPageState extends ConsumerState<TodoPage> {
   Widget build(BuildContext context) {
     ref.watch(reminderListProvider);
     ref.watch(todoGroupListProvider);
+    ref.watch(todoSectionOrderProvider);
     final bool showTodoCreatedDate = ref.watch(showTodoCreatedDateProvider);
     final reminderNotifier = ref.read(reminderListProvider.notifier);
     final List<TodoGroup> todoGroups = ref.watch(todoGroupListProvider);
@@ -889,77 +1343,116 @@ class _TodoPageState extends ConsumerState<TodoPage> {
     required Color deadlineHeaderColor,
     required Color normalHeaderColor,
   }) {
-    final List<Widget> slivers = <Widget>[
-      SliverMainAxisGroup(
-        slivers: <Widget>[
-          _pinnedSectionHeader(
-            extent: _showDeadlineTodos
-                ? _expandedSectionHeaderExtent(context)
-                : _collapsedSectionHeaderExtent(context),
-            child: _buildDeadlineSectionHeader(
-              context: context,
-              l10n: l10n,
-              deadlineHeaderColor: deadlineHeaderColor,
-              count: pendingDeadline.length,
-            ),
-          ),
-          if (_showDeadlineTodos && pendingDeadline.isNotEmpty)
-            SliverToBoxAdapter(
-              child: _buildTodoConnectedList(
-                todos: pendingDeadline,
-                reminderNotifier: reminderNotifier,
-                showCreatedDate: showTodoCreatedDate,
-                keyPrefix: 'todo_deadline',
-              ),
-            ),
-          SliverToBoxAdapter(
-            child: SizedBox(
-              height: _todoGroupSectionGap(
-                isExpanded: _showDeadlineTodos,
-                hasListItems: pendingDeadline.isNotEmpty,
-              ),
-            ),
-          ),
-        ],
-      ),
-      SliverMainAxisGroup(
-        slivers: <Widget>[
-          _pinnedSectionHeader(
-            extent: _showNormalTodos
-                ? _expandedSectionHeaderExtent(context)
-                : _collapsedSectionHeaderExtent(context),
-            child: _buildNormalSectionHeader(
-              context: context,
-              l10n: l10n,
-              normalHeaderColor: normalHeaderColor,
-              count: pendingNormal.length,
-            ),
-          ),
-          if (_showNormalTodos && pendingNormal.isNotEmpty)
-            SliverToBoxAdapter(
-              child: _buildTodoConnectedList(
-                todos: pendingNormal,
-                reminderNotifier: reminderNotifier,
-                showCreatedDate: showTodoCreatedDate,
-                keyPrefix: 'todo_normal',
-              ),
-            ),
-          SliverToBoxAdapter(
-            child: SizedBox(
-              height: _todoGroupSectionGap(
-                isExpanded: _showNormalTodos,
-                hasListItems: pendingNormal.isNotEmpty,
-              ),
-            ),
-          ),
-        ],
-      ),
-    ];
+    final List<String> sectionOrder = ref
+        .read(todoSectionOrderProvider.notifier)
+        .normalizedOrder(todoGroups);
+    final List<Widget> slivers = <Widget>[];
 
-    for (final TodoGroup group in todoGroups) {
+    for (int sectionIndex = 0; sectionIndex < sectionOrder.length; sectionIndex++) {
+      final String sectionId = sectionOrder[sectionIndex];
+
+      if (sectionId == kTodoDeadlineSectionId) {
+        slivers.add(
+          SliverMainAxisGroup(
+            slivers: <Widget>[
+              _pinnedSectionHeader(
+                extent: _showDeadlineTodos
+                    ? _expandedSectionHeaderExtent(context)
+                    : _collapsedSectionHeaderExtent(context),
+                child: _buildReorderableSectionHeader(
+                  sectionId: sectionId,
+                  sectionIndex: sectionIndex,
+                  orderedSectionIds: sectionOrder,
+                  todoGroups: todoGroups,
+                  child: _buildDeadlineSectionHeader(
+                    context: context,
+                    l10n: l10n,
+                    deadlineHeaderColor: deadlineHeaderColor,
+                    count: pendingDeadline.length,
+                  ),
+                ),
+              ),
+              if (_showDeadlineTodos && pendingDeadline.isNotEmpty)
+                SliverToBoxAdapter(
+                  child: _buildTodoConnectedList(
+                    todos: pendingDeadline,
+                    reminderNotifier: reminderNotifier,
+                    showCreatedDate: showTodoCreatedDate,
+                    keyPrefix: 'todo_deadline',
+                    reorderEnabled: false,
+                  ),
+                ),
+              SliverToBoxAdapter(
+                child: SizedBox(
+                  height: _todoGroupSectionGap(
+                    isExpanded: _showDeadlineTodos,
+                    hasListItems: pendingDeadline.isNotEmpty,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+        continue;
+      }
+
+      if (sectionId == kTodoNormalSectionId) {
+        slivers.add(
+          SliverMainAxisGroup(
+            slivers: <Widget>[
+              _pinnedSectionHeader(
+                extent: _showNormalTodos
+                    ? _expandedSectionHeaderExtent(context)
+                    : _collapsedSectionHeaderExtent(context),
+                child: _buildReorderableSectionHeader(
+                  sectionId: sectionId,
+                  sectionIndex: sectionIndex,
+                  orderedSectionIds: sectionOrder,
+                  todoGroups: todoGroups,
+                  child: _buildNormalSectionHeader(
+                    context: context,
+                    l10n: l10n,
+                    normalHeaderColor: normalHeaderColor,
+                    pendingNormal: pendingNormal,
+                    count: pendingNormal.length,
+                  ),
+                ),
+              ),
+              if (_showNormalTodos &&
+                  (pendingNormal.isNotEmpty || _normalHasDraftTodo()))
+                SliverToBoxAdapter(
+                  child: _buildTodoConnectedList(
+                    todos: pendingNormal,
+                    reminderNotifier: reminderNotifier,
+                    showCreatedDate: showTodoCreatedDate,
+                    keyPrefix: 'todo_normal',
+                  ),
+                ),
+              SliverToBoxAdapter(
+                child: SizedBox(
+                  height: _todoGroupSectionGap(
+                    isExpanded: _showNormalTodos,
+                    hasListItems:
+                        pendingNormal.isNotEmpty || _normalHasDraftTodo(),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+        continue;
+      }
+
+      final TodoGroup? group = _todoGroupForSectionId(sectionId, todoGroups);
+      if (group == null) {
+        continue;
+      }
+
       final List<Reminder> groupTodos = _pendingTodosForGroup(pending, group.id);
       final bool isExpanded = _isTodoGroupExpanded(group.id);
       final Color groupHeaderColor = _todoGroupSectionHeaderColor(groupTodos);
+      final bool showGroupList =
+          isExpanded && (groupTodos.isNotEmpty || _groupHasDraftTodo(group.id));
 
       slivers.add(
         SliverMainAxisGroup(
@@ -968,15 +1461,22 @@ class _TodoPageState extends ConsumerState<TodoPage> {
               extent: isExpanded
                   ? _expandedSectionHeaderExtent(context)
                   : _collapsedSectionHeaderExtent(context),
-              child: _buildTodoGroupSectionHeader(
-                context: context,
-                group: group,
-                count: groupTodos.length,
-                headerColor: groupHeaderColor,
-                isExpanded: isExpanded,
+              child: _buildReorderableSectionHeader(
+                sectionId: sectionId,
+                sectionIndex: sectionIndex,
+                orderedSectionIds: sectionOrder,
+                todoGroups: todoGroups,
+                child: _buildTodoGroupSectionHeader(
+                  context: context,
+                  group: group,
+                  groupTodos: groupTodos,
+                  count: groupTodos.length,
+                  headerColor: groupHeaderColor,
+                  isExpanded: isExpanded,
+                ),
               ),
             ),
-            if (isExpanded && groupTodos.isNotEmpty)
+            if (showGroupList)
               SliverToBoxAdapter(
                 child: _buildTodoConnectedList(
                   todos: groupTodos,
@@ -989,7 +1489,7 @@ class _TodoPageState extends ConsumerState<TodoPage> {
               child: SizedBox(
                 height: _todoGroupSectionGap(
                   isExpanded: isExpanded,
-                  hasListItems: groupTodos.isNotEmpty,
+                  hasListItems: showGroupList,
                 ),
               ),
             ),
@@ -1074,6 +1574,7 @@ class _TodoPageState extends ConsumerState<TodoPage> {
   Widget _buildTodoGroupSectionHeader({
     required BuildContext context,
     required TodoGroup group,
+    required List<Reminder> groupTodos,
     required int count,
     required Color headerColor,
     required bool isExpanded,
@@ -1081,36 +1582,48 @@ class _TodoPageState extends ConsumerState<TodoPage> {
     if (isExpanded) {
       return Material(
         color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(10),
-          onTap: () => _toggleTodoGroupExpanded(group.id),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-            child: Row(
-              children: <Widget>[
-                Icon(
-                  Icons.keyboard_arrow_down,
-                  size: 20,
-                  color: headerColor,
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    group.name,
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+          child: Row(
+            children: <Widget>[
+              Expanded(
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(10),
+                  onTap: () => _toggleTodoGroupExpanded(group.id),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                    child: Row(
+                      children: <Widget>[
+                        Icon(
+                          Icons.keyboard_arrow_down,
+                          size: 20,
                           color: headerColor,
-                          fontWeight: FontWeight.w600,
                         ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            group.name,
+                            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                  color: headerColor,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                          ),
+                        ),
+                        Text(
+                          '$count',
+                          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                color: headerColor,
+                              ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-                Text(
-                  '$count',
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: headerColor,
-                      ),
-                ),
-              ],
-            ),
+              ),
+              _buildSectionAddTodoButton(
+                onPressed: () => _createTaskInGroup(group, groupTodos),
+              ),
+            ],
           ),
         ),
       );
@@ -1120,8 +1633,14 @@ class _TodoPageState extends ConsumerState<TodoPage> {
       key: ValueKey<String>('todo_group_${group.id}'),
       endActionPane: ActionPane(
         motion: const DrawerMotion(),
-        extentRatio: 0.14,
+        extentRatio: 0.28,
         children: <Widget>[
+          AppSlidableActionButton(
+            onPressed: () => _renameTodoGroup(group),
+            icon: Icons.edit_outlined,
+            iconColor: AppTheme.primaryColor,
+            backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.18),
+          ),
           AppSlidableActionButton(
             onPressed: () => _deleteTodoGroup(group),
             icon: Icons.delete_outline,
@@ -1131,6 +1650,7 @@ class _TodoPageState extends ConsumerState<TodoPage> {
         ],
       ),
       child: AppGroupedSection(
+        backgroundColor: Colors.transparent,
         children: <Widget>[
           Material(
             color: Colors.transparent,
@@ -1179,44 +1699,57 @@ class _TodoPageState extends ConsumerState<TodoPage> {
     if (_showDeadlineTodos) {
       return Material(
         color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(10),
-          onTap: () {
-            setState(() => _showDeadlineTodos = !_showDeadlineTodos);
-          },
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-            child: Row(
-              children: <Widget>[
-                Icon(
-                  Icons.keyboard_arrow_down,
-                  size: 20,
-                  color: deadlineHeaderColor,
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    l10n.todoDeadlineSection,
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+          child: Row(
+            children: <Widget>[
+              Expanded(
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(10),
+                  onTap: () {
+                    setState(() => _showDeadlineTodos = !_showDeadlineTodos);
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                    child: Row(
+                      children: <Widget>[
+                        Icon(
+                          Icons.keyboard_arrow_down,
+                          size: 20,
                           color: deadlineHeaderColor,
-                          fontWeight: FontWeight.w600,
                         ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            l10n.todoDeadlineSection,
+                            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                  color: deadlineHeaderColor,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                          ),
+                        ),
+                        Text(
+                          '$count',
+                          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                color: deadlineHeaderColor,
+                              ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-                Text(
-                  '$count',
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: deadlineHeaderColor,
-                      ),
-                ),
-              ],
-            ),
+              ),
+              _buildSectionAddTodoButton(
+                onPressed: _createDeadlineTask,
+              ),
+            ],
           ),
         ),
       );
     }
 
     return AppGroupedSection(
+      backgroundColor: Colors.transparent,
       children: <Widget>[
         Material(
           color: Colors.transparent,
@@ -1261,49 +1794,63 @@ class _TodoPageState extends ConsumerState<TodoPage> {
     required BuildContext context,
     required AppLocalizations l10n,
     required Color normalHeaderColor,
+    required List<Reminder> pendingNormal,
     required int count,
   }) {
     if (_showNormalTodos) {
       return Material(
         color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(10),
-          onTap: () {
-            setState(() => _showNormalTodos = !_showNormalTodos);
-          },
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-            child: Row(
-              children: <Widget>[
-                Icon(
-                  Icons.keyboard_arrow_down,
-                  size: 20,
-                  color: normalHeaderColor,
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    l10n.todoNormalSection,
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+          child: Row(
+            children: <Widget>[
+              Expanded(
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(10),
+                  onTap: () {
+                    setState(() => _showNormalTodos = !_showNormalTodos);
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                    child: Row(
+                      children: <Widget>[
+                        Icon(
+                          Icons.keyboard_arrow_down,
+                          size: 20,
                           color: normalHeaderColor,
-                          fontWeight: FontWeight.w600,
                         ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            l10n.todoNormalSection,
+                            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                  color: normalHeaderColor,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                          ),
+                        ),
+                        Text(
+                          '$count',
+                          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                color: normalHeaderColor,
+                              ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-                Text(
-                  '$count',
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: normalHeaderColor,
-                      ),
-                ),
-              ],
-            ),
+              ),
+              _buildSectionAddTodoButton(
+                onPressed: () => _createNormalTask(pendingNormal),
+              ),
+            ],
           ),
         ),
       );
     }
 
     return AppGroupedSection(
+      backgroundColor: Colors.transparent,
       children: <Widget>[
         Material(
           color: Colors.transparent,
@@ -1385,11 +1932,22 @@ class _TodoPinnedSectionHeaderDelegate extends SliverPersistentHeaderDelegate {
 
 class _TodoCard extends StatefulWidget {
   const _TodoCard({
+    super.key,
     required this.reminder,
     required this.showCreatedDate,
     this.grouped = false,
+    this.inlineEditEnabled = true,
+    this.editing = false,
+    this.requestFocus = false,
+    this.selectAllOnFocus = true,
+    this.isDraft = false,
     this.calendarScheduleLabel,
-    this.onTitleCommitted,
+    this.onFocusHandled,
+    this.onEditStart,
+    this.onEditEnd,
+    this.onTitleSave,
+    this.onCreateBelow,
+    this.onDiscardDraft,
     this.onCheckChanged,
     this.onSubItemsTap,
   });
@@ -1397,8 +1955,18 @@ class _TodoCard extends StatefulWidget {
   final Reminder reminder;
   final bool showCreatedDate;
   final bool grouped;
+  final bool inlineEditEnabled;
+  final bool editing;
+  final bool requestFocus;
+  final bool selectAllOnFocus;
+  final bool isDraft;
   final String? calendarScheduleLabel;
-  final ValueChanged<String>? onTitleCommitted;
+  final VoidCallback? onFocusHandled;
+  final VoidCallback? onEditStart;
+  final VoidCallback? onEditEnd;
+  final Future<void> Function(String title)? onTitleSave;
+  final VoidCallback? onCreateBelow;
+  final VoidCallback? onDiscardDraft;
   final ValueChanged<bool?>? onCheckChanged;
   final VoidCallback? onSubItemsTap;
 
@@ -1409,82 +1977,189 @@ class _TodoCard extends StatefulWidget {
 class _TodoCardState extends State<_TodoCard> {
   late final TextEditingController _titleController;
   late final FocusNode _titleFocusNode;
-  bool _editingTitle = false;
+  String _lastSavedTitle = '';
   bool _notesExpanded = false;
+  bool _suppressFocusExit = false;
+  bool _isExitingEdit = false;
 
   @override
   void initState() {
     super.initState();
     _titleController = TextEditingController(text: widget.reminder.title);
+    _titleController.addListener(_onTitleTextChanged);
     _titleFocusNode = FocusNode();
     _titleFocusNode.addListener(_onTitleFocusChange);
+    _lastSavedTitle = widget.reminder.title;
+    if (widget.requestFocus) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _requestEditFocus());
+    }
   }
 
   @override
   void didUpdateWidget(covariant _TodoCard oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!_editingTitle && oldWidget.reminder.title != widget.reminder.title) {
+    if (widget.editing && !oldWidget.editing) {
+      _lastSavedTitle = widget.reminder.title;
       _titleController.text = widget.reminder.title;
+      _suppressFocusExit = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _requestEditFocus());
+    } else if (!widget.editing && oldWidget.editing) {
+      _suppressFocusExit = false;
+      _titleController.text = widget.reminder.title;
+      _lastSavedTitle = widget.reminder.title;
+    } else if (!widget.editing && oldWidget.reminder.title != widget.reminder.title) {
+      _titleController.text = widget.reminder.title;
+      _lastSavedTitle = widget.reminder.title;
     }
     if (oldWidget.reminder.notes != widget.reminder.notes) {
       _notesExpanded = false;
+    } else if (widget.editing &&
+        widget.requestFocus &&
+        !oldWidget.requestFocus &&
+        oldWidget.editing) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _requestEditFocus());
     }
   }
 
   @override
   void dispose() {
+    _suppressFocusExit = true;
+    _titleController.removeListener(_onTitleTextChanged);
     _titleFocusNode.removeListener(_onTitleFocusChange);
     _titleFocusNode.dispose();
     _titleController.dispose();
     super.dispose();
   }
 
-  void _onTitleFocusChange() {
-    if (!_titleFocusNode.hasFocus && _editingTitle) {
-      _commitTitleEdit();
-    }
-  }
-
-  void _startTitleEdit() {
-    if (_editingTitle) {
+  void _onTitleTextChanged() {
+    if (!widget.editing) {
       return;
     }
-    _titleController.text = widget.reminder.title;
-    setState(() => _editingTitle = true);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) {
-        return;
-      }
-      _titleFocusNode.requestFocus();
+    setState(() {});
+  }
+
+  bool get _hasUnsavedTitleEdit =>
+      widget.editing && _titleController.text.trim() != _lastSavedTitle.trim();
+
+  void _requestEditFocus() {
+    if (!mounted || !widget.editing) {
+      return;
+    }
+    _titleFocusNode.requestFocus();
+    if (widget.selectAllOnFocus) {
       _titleController.selection = TextSelection(
         baseOffset: 0,
         extentOffset: _titleController.text.length,
       );
+    } else {
+      _titleController.selection = TextSelection.collapsed(
+        offset: _titleController.text.length,
+      );
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      widget.onFocusHandled?.call();
     });
   }
 
-  void _commitTitleEdit() {
-    if (!_editingTitle) {
+  void _onTitleFocusChange() {
+    if (_suppressFocusExit || !_titleFocusNode.hasFocus || !widget.editing) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          _suppressFocusExit ||
+          _titleFocusNode.hasFocus ||
+          !widget.editing) {
+        return;
+      }
+      unawaited(_exitTitleEdit());
+    });
+  }
+
+  void _startTitleEdit() {
+    if (!widget.inlineEditEnabled || widget.editing) {
+      return;
+    }
+    widget.onEditStart?.call();
+  }
+
+  Future<void> _onTitleSubmitted(String _) async {
+    if (!widget.editing || _isExitingEdit) {
       return;
     }
     final String value = _titleController.text.trim();
     if (value.isEmpty) {
-      _titleController.text = widget.reminder.title;
-    } else if (value != widget.reminder.title) {
-      widget.onTitleCommitted?.call(value);
+      if (widget.isDraft) {
+        _suppressFocusExit = true;
+        widget.onDiscardDraft?.call();
+      }
+      return;
     }
-    setState(() => _editingTitle = false);
-    _titleFocusNode.unfocus();
+    if (value != _lastSavedTitle) {
+      _suppressFocusExit = true;
+      await widget.onTitleSave?.call(value);
+      if (!mounted || !widget.editing) {
+        _suppressFocusExit = false;
+        return;
+      }
+      _lastSavedTitle = value;
+      _suppressFocusExit = false;
+      if (mounted) {
+        setState(() {});
+      }
+      _titleFocusNode.requestFocus();
+      return;
+    }
+    _suppressFocusExit = true;
+    widget.onCreateBelow?.call();
   }
 
-  TextStyle? _titleTextStyle(BuildContext context) {
+  Future<void> _exitTitleEdit() async {
+    if (!widget.editing || _isExitingEdit) {
+      return;
+    }
+    _isExitingEdit = true;
+    try {
+      final String value = _titleController.text.trim();
+      if (value.isEmpty) {
+        if (widget.isDraft) {
+          widget.onDiscardDraft?.call();
+        } else {
+          _titleController.text = widget.reminder.title;
+          widget.onEditEnd?.call();
+        }
+        return;
+      }
+      if (value != _lastSavedTitle) {
+        await widget.onTitleSave?.call(value);
+        if (!mounted) {
+          return;
+        }
+        _lastSavedTitle = value;
+      }
+      widget.onEditEnd?.call();
+    } finally {
+      _isExitingEdit = false;
+      _suppressFocusExit = false;
+    }
+  }
+
+  TextStyle? _titleTextStyle(
+    BuildContext context, {
+    bool showEditUnderline = false,
+  }) {
     final Color textColor = widget.reminder.isCompleted
         ? AppTheme.secondaryLabelColor
         : AppTheme.textPrimaryColor;
     return Theme.of(context).textTheme.titleMedium?.copyWith(
           color: textColor,
-          decoration:
-              widget.reminder.isCompleted ? TextDecoration.lineThrough : TextDecoration.none,
+          decoration: showEditUnderline
+              ? TextDecoration.underline
+              : (widget.reminder.isCompleted
+                  ? TextDecoration.lineThrough
+                  : TextDecoration.none),
+          decorationColor:
+              showEditUnderline ? AppTheme.primaryColor : textColor,
           height: 1.3,
         );
   }
@@ -1661,6 +2336,10 @@ class _TodoCardState extends State<_TodoCard> {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final Reminder reminder = widget.reminder;
     final TextStyle? titleStyle = _titleTextStyle(context);
+    final TextStyle? editingTitleStyle = _titleTextStyle(
+      context,
+      showEditUnderline: _hasUnsavedTitleEdit,
+    );
 
     final bool isOverdue = _isDeadlineOverdue(reminder);
 
@@ -1690,19 +2369,19 @@ class _TodoCardState extends State<_TodoCard> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
-                  _editingTitle
+                  widget.editing
                       ? TextField(
                           controller: _titleController,
                           focusNode: _titleFocusNode,
-                          style: titleStyle,
+                          style: editingTitleStyle,
                           decoration: const InputDecoration(
                             isDense: true,
                             border: InputBorder.none,
                             contentPadding: EdgeInsets.zero,
                           ),
-                          maxLines: null,
+                          maxLines: 1,
                           textInputAction: TextInputAction.done,
-                          onSubmitted: (_) => _commitTitleEdit(),
+                          onSubmitted: _onTitleSubmitted,
                         )
                       : GestureDetector(
                           onTap: _startTitleEdit,

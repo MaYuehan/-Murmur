@@ -37,7 +37,7 @@ class ReminderStorage {
         .whereType<Map<dynamic, dynamic>>()
         .map(TodoGroup.fromMap)
         .toList()
-      ..sort((TodoGroup a, TodoGroup b) => a.createdAt.compareTo(b.createdAt));
+      ..sort((TodoGroup a, TodoGroup b) => a.sortOrder.compareTo(b.sortOrder));
   }
 
   static Future<void> saveTodoGroups(List<TodoGroup> groups) async {

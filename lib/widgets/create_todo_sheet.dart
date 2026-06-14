@@ -24,13 +24,22 @@ enum _ExpandedField { none, deadlineDate, deadlineTime, customRemindTime }
 const String _noTodoGroupPickerValue = '';
 
 class CreateTodoSheet extends ConsumerStatefulWidget {
-  const CreateTodoSheet({super.key, this.editingReminder});
+  const CreateTodoSheet({
+    super.key,
+    this.editingReminder,
+    this.initialTodoGroupId,
+    this.initialHasDeadline = false,
+  });
 
   final Reminder? editingReminder;
+  final String? initialTodoGroupId;
+  final bool initialHasDeadline;
 
   static Future<bool?> show(
     BuildContext context, {
     Reminder? editingReminder,
+    String? initialTodoGroupId,
+    bool initialHasDeadline = false,
   }) {
     return showModalBottomSheet<bool>(
       context: context,
@@ -43,7 +52,11 @@ class CreateTodoSheet extends ConsumerStatefulWidget {
         final double sheetHeight = MediaQuery.sizeOf(sheetContext).height * 0.8;
         return SizedBox(
           height: sheetHeight,
-          child: CreateTodoSheet(editingReminder: editingReminder),
+          child: CreateTodoSheet(
+            editingReminder: editingReminder,
+            initialTodoGroupId: initialTodoGroupId,
+            initialHasDeadline: initialHasDeadline,
+          ),
         );
       },
     );
@@ -88,6 +101,11 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
   void _initFromReminderOrDefaults() {
     final Reminder? existing = widget.editingReminder;
     if (existing == null) {
+      _selectedTodoGroupId = widget.initialTodoGroupId;
+      if (widget.initialHasDeadline) {
+        _hasDeadline = true;
+        _deadlineDate = DateTimeUtils.startOfDay(DateTime.now());
+      }
       return;
     }
 

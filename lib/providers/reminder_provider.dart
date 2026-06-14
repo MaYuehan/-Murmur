@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:murmur/core/utils/date_time_utils.dart';
 import 'package:murmur/core/utils/reminder_time_rules.dart';
 import 'package:murmur/core/utils/notification_service.dart';
+import 'package:murmur/core/utils/list_sort_order.dart';
 import 'package:murmur/core/utils/reminder_storage.dart';
 import 'package:murmur/models/reminder.dart';
 import 'package:murmur/models/todo_sub_item.dart';
@@ -22,7 +23,12 @@ class ReminderNotifier extends StateNotifier<List<Reminder>> {
     return reminders
         .map(
           (Reminder reminder) => reminder.copyWith(
-            subItems: List<TodoSubItem>.from(reminder.subItems),
+            sortOrder: reminder.sortOrder,
+            subItems: reminder.subItems
+                .map(
+                  (TodoSubItem item) => item.copyWith(sortOrder: item.sortOrder),
+                )
+                .toList(),
           ),
         )
         .toList();
@@ -82,6 +88,8 @@ class ReminderNotifier extends StateNotifier<List<Reminder>> {
     String? todoGroupId,
     bool isCompleted = false,
     String? id,
+    DateTime? createdAt,
+    int? sortOrder,
   }) async {
     final DateTime now = DateTime.now();
 
@@ -111,7 +119,8 @@ class ReminderNotifier extends StateNotifier<List<Reminder>> {
       linkedTodoId: linkedTodoId,
       todoGroupId: todoGroupId,
       isCompleted: isCompleted,
-      createdAt: now,
+      createdAt: createdAt ?? now,
+      sortOrder: sortOrder,
     );
 
     state = <Reminder>[...state, reminder];
@@ -120,7 +129,7 @@ class ReminderNotifier extends StateNotifier<List<Reminder>> {
     await _scheduleNotificationsIfNeeded(reminder);
   }
 
-  Future<void> addFlexibleTodo({
+  Future<String> addFlexibleTodo({
     required String title,
     DateTime? deadlineAt,
     bool syncToCalendar = false,
@@ -137,9 +146,9 @@ class ReminderNotifier extends StateNotifier<List<Reminder>> {
     bool isCustomVoice = false,
     String? notes,
     String? todoGroupId,
+    int? sortOrder,
   }) async {
-    final DateTime now = DateTime.now();
-    final String todoId = now.microsecondsSinceEpoch.toString();
+    final String todoId = DateTime.now().microsecondsSinceEpoch.toString();
     String? calendarLinkedId;
     final String? normalizedNotes =
         notes?.trim().isEmpty == true ? null : notes?.trim();
@@ -188,7 +197,9 @@ class ReminderNotifier extends StateNotifier<List<Reminder>> {
       isCustomVoice: isCustomVoice,
       notes: normalizedNotes,
       todoGroupId: todoGroupId,
+      sortOrder: sortOrder,
     );
+    return todoId;
   }
 
   Future<void> updateFlexibleTodo({
@@ -386,9 +397,64 @@ class ReminderNotifier extends StateNotifier<List<Reminder>> {
             return deadlineCompare;
           }
         }
-        return a.createdAt.compareTo(b.createdAt);
+        return a.sortOrder.compareTo(b.sortOrder);
       });
     return list;
+  }
+
+  Future<void> reorderFlexibleTodoInList({
+    required List<Reminder> listContext,
+    required int fromIndex,
+    required int toIndex,
+  }) async {
+    if (fromIndex == toIndex ||
+        fromIndex < 0 ||
+        toIndex < 0 ||
+        fromIndex >= listContext.length ||
+        toIndex >= listContext.length) {
+      return;
+    }
+
+    final List<Reminder> items = List<Reminder>.from(listContext);
+    final Reminder moved = items.removeAt(fromIndex);
+    items.insert(toIndex, moved);
+
+    final int newSortOrder;
+    if (items.length == 1) {
+      newSortOrder = moved.sortOrder;
+    } else if (toIndex == 0) {
+      newSortOrder = ListSortOrder.beforeFirst(items[1].sortOrder);
+    } else if (toIndex == items.length - 1) {
+      newSortOrder = ListSortOrder.afterLast(items[toIndex - 1].sortOrder);
+    } else {
+      newSortOrder = ListSortOrder.betweenOrdered(
+        items[toIndex - 1].sortOrder,
+        items[toIndex + 1].sortOrder,
+      );
+    }
+
+    DateTime? newDeadlineAt;
+    bool deadlineChanged = false;
+    if (moved.hasDeadline) {
+      DateTime? targetDeadline;
+      if (toIndex > 0) {
+        targetDeadline = items[toIndex - 1].deadlineAt;
+      } else if (items.length > 1) {
+        targetDeadline = items[1].deadlineAt;
+      }
+      if (targetDeadline != null &&
+          moved.deadlineAt?.compareTo(targetDeadline) != 0) {
+        newDeadlineAt = targetDeadline;
+        deadlineChanged = true;
+      }
+    }
+
+    await updateReminder(
+      reminderId: moved.id,
+      sortOrder: newSortOrder,
+      deadlineAt: deadlineChanged ? newDeadlineAt : null,
+      syncLinkedCalendar: deadlineChanged && moved.isSyncedToCalendar,
+    );
   }
 
   Future<void> syncFlexibleTodoToCalendar({
@@ -548,6 +614,7 @@ class ReminderNotifier extends StateNotifier<List<Reminder>> {
     bool syncLinkedCalendar = false,
     String? todoGroupId,
     bool clearTodoGroupId = false,
+    int? sortOrder,
   }) async {
     final Reminder? existing = getReminderById(reminderId);
     if (existing != null) {
@@ -595,6 +662,7 @@ class ReminderNotifier extends StateNotifier<List<Reminder>> {
         isCompleted: isCompleted,
         todoGroupId: todoGroupId,
         clearTodoGroupId: clearTodoGroupId,
+        sortOrder: sortOrder,
       );
       return updated!;
     }).toList();
@@ -848,26 +916,37 @@ class ReminderNotifier extends StateNotifier<List<Reminder>> {
     return getReminderById(calendarReminder!.linkedTodoId!);
   }
 
-  Future<void> addTodoSubItem({
+  Future<String> addTodoSubItem({
     required String parentId,
     required String title,
+    int? sortOrder,
   }) async {
     final Reminder? parent = getReminderById(parentId);
     if (parent == null || !parent.isFlexible) {
-      return;
+      return '';
     }
-    final String trimmed = title.trim();
-    if (trimmed.isEmpty) {
-      return;
-    }
+    final String itemId = DateTime.now().microsecondsSinceEpoch.toString();
     final TodoSubItem item = TodoSubItem(
-      id: DateTime.now().microsecondsSinceEpoch.toString(),
-      title: trimmed,
+      id: itemId,
+      title: title,
+      sortOrder: sortOrder,
     );
-    await _saveTodoSubItems(
-      parentId: parentId,
-      subItems: <TodoSubItem>[...parent.subItems, item],
-    );
+    final List<TodoSubItem> subItems = <TodoSubItem>[...parent.subItems, item]
+      ..sort((TodoSubItem a, TodoSubItem b) => a.sortOrder.compareTo(b.sortOrder));
+    await _saveTodoSubItems(parentId: parentId, subItems: subItems);
+    return itemId;
+  }
+
+  Future<String> insertTodoSubItemAfter({
+    required String parentId,
+    required int afterIndex,
+    required List<TodoSubItem> listContext,
+    String title = '',
+  }) async {
+    final List<int> orders =
+        listContext.map((TodoSubItem item) => item.sortOrder).toList();
+    final int order = ListSortOrder.forInsertAfter(orders, afterIndex);
+    return addTodoSubItem(parentId: parentId, title: title, sortOrder: order);
   }
 
   Future<void> updateTodoSubItemTitle({

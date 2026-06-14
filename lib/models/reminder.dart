@@ -1,7 +1,8 @@
+import 'package:murmur/core/utils/list_sort_order.dart';
 import 'package:murmur/models/todo_sub_item.dart';
 
 class Reminder {
-  const Reminder({
+  Reminder({
     required this.id,
     required this.title,
     required this.scheduledTime,
@@ -29,8 +30,10 @@ class Reminder {
     required this.isCompleted,
     this.completedAt,
     required this.createdAt,
+    int? sortOrder,
     List<TodoSubItem>? subItems,
-  }) : _subItems = subItems;
+  })  : _sortOrder = sortOrder,
+        _subItems = subItems;
 
   final String id;
   final String title;
@@ -59,7 +62,11 @@ class Reminder {
   final bool isCompleted;
   final DateTime? completedAt;
   final DateTime createdAt;
+  final int? _sortOrder;
   final List<TodoSubItem>? _subItems;
+
+  int get sortOrder =>
+      _sortOrder ?? ListSortOrder.defaultFromCreatedAt(createdAt);
 
   List<TodoSubItem> get subItems => _subItems ?? const <TodoSubItem>[];
 
@@ -110,6 +117,7 @@ class Reminder {
     DateTime? completedAt,
     bool clearCompletedAt = false,
     DateTime? createdAt,
+    int? sortOrder,
     List<TodoSubItem>? subItems,
   }) {
     return Reminder(
@@ -142,6 +150,7 @@ class Reminder {
       isCompleted: isCompleted ?? this.isCompleted,
       completedAt: clearCompletedAt ? null : (completedAt ?? this.completedAt),
       createdAt: createdAt ?? this.createdAt,
+      sortOrder: sortOrder ?? _sortOrder,
       subItems: subItems ?? _subItems,
     );
   }
@@ -175,6 +184,7 @@ class Reminder {
       'isCompleted': isCompleted,
       'completedAt': completedAt?.toIso8601String(),
       'createdAt': createdAt.toIso8601String(),
+      'sortOrder': sortOrder,
       'subItems': subItems.map((TodoSubItem item) => item.toMap()).toList(),
     };
   }
@@ -199,6 +209,7 @@ class Reminder {
     final String? completedAtRaw = map['completedAt'] as String?;
     final bool isCustomVoice = isCustomVoiceRaw ?? false;
     final String? remindVoiceIdRaw = map['remindVoiceId'] as String?;
+    final DateTime createdAt = DateTime.parse(map['createdAt'] as String);
 
     return Reminder(
       id: map['id'] as String,
@@ -232,7 +243,9 @@ class Reminder {
       todoGroupId: map['todoGroupId'] as String?,
       isCompleted: map['isCompleted'] as bool,
       completedAt: completedAtRaw == null ? null : DateTime.parse(completedAtRaw),
-      createdAt: DateTime.parse(map['createdAt'] as String),
+      createdAt: createdAt,
+      sortOrder: map['sortOrder'] as int? ??
+          ListSortOrder.defaultFromCreatedAt(createdAt),
       subItems: (map['subItems'] as List<dynamic>?)
               ?.whereType<Map<dynamic, dynamic>>()
               .map(TodoSubItem.fromMap)
