@@ -4,15 +4,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:murmur/core/theme/app_theme.dart';
+import 'package:murmur/core/utils/clear_completed_scope.dart';
+import 'package:murmur/core/utils/completed_todo_section.dart';
 import 'package:murmur/core/utils/list_sort_order.dart';
 import 'package:murmur/core/utils/date_time_utils.dart';
 import 'package:murmur/core/utils/reminder_time_rules.dart';
 import 'package:murmur/l10n/app_localizations.dart';
 import 'package:murmur/models/reminder.dart';
 import 'package:murmur/models/todo_group.dart';
+import 'package:murmur/providers/calendar_week_start_provider.dart';
 import 'package:murmur/providers/reminder_provider.dart';
 import 'package:murmur/providers/todo_display_settings_provider.dart';
 import 'package:murmur/providers/todo_group_provider.dart';
+import 'package:murmur/providers/todo_section_expansion_provider.dart';
 import 'package:murmur/providers/todo_section_order_provider.dart';
 import 'package:murmur/core/utils/todo_section_id.dart';
 import 'package:murmur/widgets/app_date_picker.dart';
@@ -100,12 +104,9 @@ class _TodoPageState extends ConsumerState<TodoPage> {
   static const double _todoRowDragShiftOffset = 14;
 
   bool _isCompletedView = false;
-  bool _showDeadlineTodos = true;
-  bool _showNormalTodos = true;
   bool _isCreatingTodoGroup = false;
   final TextEditingController _newTodoGroupNameController = TextEditingController();
   final FocusNode _newTodoGroupFocusNode = FocusNode();
-  final Map<String, bool> _expandedTodoGroups = <String, bool>{};
   String? _editingTodoId;
   String? _pendingFocusTodoId;
   bool _pendingFocusSelectAll = true;
@@ -613,13 +614,11 @@ class _TodoPageState extends ConsumerState<TodoPage> {
   }
 
   bool _isTodoGroupExpanded(String groupId) {
-    return _expandedTodoGroups[groupId] ?? true;
+    return ref.read(todoSectionExpansionProvider).isGroupExpanded(groupId);
   }
 
   void _toggleTodoGroupExpanded(String groupId) {
-    setState(() {
-      _expandedTodoGroups[groupId] = !_isTodoGroupExpanded(groupId);
-    });
+    ref.read(todoSectionExpansionProvider.notifier).toggleGroupExpanded(groupId);
   }
 
   void _startCreateTodoGroup() {
@@ -655,8 +654,10 @@ class _TodoPageState extends ConsumerState<TodoPage> {
     }
     setState(() {
       _isCreatingTodoGroup = false;
-      _expandedTodoGroups[group.id] = true;
     });
+    await ref
+        .read(todoSectionExpansionProvider.notifier)
+        .setGroupExpanded(group.id, true);
   }
 
   Future<void> _deleteTodoGroup(TodoGroup group) async {
@@ -684,9 +685,7 @@ class _TodoPageState extends ConsumerState<TodoPage> {
     if (!mounted) {
       return;
     }
-    setState(() {
-      _expandedTodoGroups.remove(group.id);
-    });
+    await ref.read(todoSectionExpansionProvider.notifier).removeGroup(group.id);
   }
 
   Future<void> _renameTodoGroup(TodoGroup group) async {
@@ -1116,7 +1115,9 @@ class _TodoPageState extends ConsumerState<TodoPage> {
     TodoGroup group,
     List<Reminder> groupTodos,
   ) async {
-    setState(() => _expandedTodoGroups[group.id] = true);
+    await ref
+        .read(todoSectionExpansionProvider.notifier)
+        .setGroupExpanded(group.id, true);
     if (groupTodos.isEmpty) {
       await _createFirstTodoInGroup(group);
       return;
@@ -1133,7 +1134,7 @@ class _TodoPageState extends ConsumerState<TodoPage> {
   }
 
   Future<void> _createDeadlineTask() async {
-    setState(() => _showDeadlineTodos = true);
+    await ref.read(todoSectionExpansionProvider.notifier).setShowDeadlineTodos(true);
     await CreateTodoSheet.show(context, initialHasDeadline: true);
   }
 
@@ -1149,7 +1150,7 @@ class _TodoPageState extends ConsumerState<TodoPage> {
   }
 
   Future<void> _createNormalTaskInline(List<Reminder> pendingNormal) async {
-    setState(() => _showNormalTodos = true);
+    await ref.read(todoSectionExpansionProvider.notifier).setShowNormalTodos(true);
     if (pendingNormal.isEmpty) {
       await _createFirstNormalTodo();
       return;
@@ -1469,14 +1470,22 @@ class _TodoPageState extends ConsumerState<TodoPage> {
     });
   }
 
-  Future<bool?> _confirmClearCompleted(int count) {
+  Future<bool?> _confirmClearCompletedScope({
+    required ClearCompletedScope scope,
+    required int count,
+  }) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     return showDialog<bool>(
       context: context,
       builder: (BuildContext dialogContext) {
         return AlertDialog(
           title: Text(l10n.todoClearCompletedConfirmTitle),
-          content: Text(l10n.todoClearCompletedConfirmBody(count)),
+          content: Text(
+            l10n.todoClearCompletedScopeConfirmBody(
+              _clearCompletedScopeLabel(scope, l10n),
+              count,
+            ),
+          ),
           actions: <Widget>[
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(false),
@@ -1495,21 +1504,96 @@ class _TodoPageState extends ConsumerState<TodoPage> {
     );
   }
 
-  Future<void> _onClearCompletedPressed(int count) async {
-    final bool? confirmed = await _confirmClearCompleted(count);
+  String _clearCompletedScopeLabel(
+    ClearCompletedScope scope,
+    AppLocalizations l10n,
+  ) {
+    switch (scope) {
+      case ClearCompletedScope.all:
+        return l10n.todoClearCompletedScopeAll;
+      case ClearCompletedScope.beforeThisWeek:
+        return l10n.todoClearCompletedScopeBeforeThisWeek;
+      case ClearCompletedScope.beforeThisMonth:
+        return l10n.todoClearCompletedScopeBeforeThisMonth;
+    }
+  }
+
+  Future<ClearCompletedScope?> _pickClearCompletedScope() {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    return showAppActionDialog<ClearCompletedScope>(
+      context: context,
+      title: l10n.todoClearCompletedScopeTitle,
+      cancelLabel: l10n.commonCancel,
+      options: <AppActionDialogOption<ClearCompletedScope>>[
+        AppActionDialogOption<ClearCompletedScope>(
+          value: ClearCompletedScope.all,
+          label: l10n.todoClearCompletedScopeAll,
+          icon: Icons.delete_outline,
+          iconColor: AppTheme.destructiveColor,
+        ),
+        AppActionDialogOption<ClearCompletedScope>(
+          value: ClearCompletedScope.beforeThisWeek,
+          label: l10n.todoClearCompletedScopeBeforeThisWeek,
+          icon: Icons.calendar_today_outlined,
+        ),
+        AppActionDialogOption<ClearCompletedScope>(
+          value: ClearCompletedScope.beforeThisMonth,
+          label: l10n.todoClearCompletedScopeBeforeThisMonth,
+          icon: Icons.calendar_month_outlined,
+        ),
+      ],
+    );
+  }
+
+  Future<void> _onClearCompletedPressed() async {
+    final ClearCompletedScope? scope = await _pickClearCompletedScope();
+    if (scope == null || !mounted) {
+      return;
+    }
+
+    final ReminderNotifier notifier = ref.read(reminderListProvider.notifier);
+    final List<Reminder> completed = notifier
+        .getFlexibleReminders(includeCompleted: true)
+        .where((Reminder item) => item.isCompleted)
+        .toList();
+    final int count = ClearCompletedScopeUtils.countMatching(
+      completed,
+      scope: scope,
+    );
+    if (count == 0) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppLocalizations.of(context).todoClearCompletedNothingToClear),
+        ),
+      );
+      return;
+    }
+
+    final bool? confirmed = await _confirmClearCompletedScope(
+      scope: scope,
+      count: count,
+    );
     if (confirmed != true || !mounted) {
       return;
     }
-    await _clearCompleted();
+    await _clearCompleted(scope: scope);
   }
 
-  Future<void> _clearCompleted() async {
+  Future<void> _clearCompleted({required ClearCompletedScope scope}) async {
     final ReminderNotifier notifier = ref.read(reminderListProvider.notifier);
+    bool shouldClear(Reminder reminder) =>
+        ClearCompletedScopeUtils.matches(reminder, scope: scope);
+
     final List<Reminder> completedWithCalendar = notifier
         .getFlexibleReminders(includeCompleted: true)
         .where(
           (Reminder reminder) =>
-              reminder.isCompleted && reminder.calendarLinkedId != null,
+              reminder.isCompleted &&
+              reminder.calendarLinkedId != null &&
+              shouldClear(reminder),
         )
         .toList();
 
@@ -1524,15 +1608,44 @@ class _TodoPageState extends ConsumerState<TodoPage> {
       alsoRemoveFromCalendar = confirmed;
     }
 
-    await notifier.clearCompletedFlexibleReminders(
+    final int clearedCount = await notifier.clearCompletedFlexibleReminders(
+      shouldClear: shouldClear,
       alsoRemoveFromCalendar: alsoRemoveFromCalendar,
     );
     if (!mounted) {
       return;
     }
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(AppLocalizations.of(context).todoClearedCompletedSnack)),
+      SnackBar(
+        content: Text(
+          AppLocalizations.of(context).todoClearedCompletedCountSnack(clearedCount),
+        ),
+      ),
     );
+  }
+
+  Future<bool> _confirmUncompleteTodo(Reminder reminder) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    final String displayTitle = reminder.title.trim().isEmpty
+        ? l10n.todoHintContent
+        : reminder.title.trim();
+    return showAppConfirmDialog(
+      context: context,
+      title: l10n.todoUncompleteConfirmTitle,
+      message: l10n.todoUncompleteConfirmBody(displayTitle),
+      cancelLabel: l10n.commonCancel,
+      confirmLabel: l10n.todoUncompleteConfirmAction,
+    );
+  }
+
+  Future<void> _onTodoCheckChanged(Reminder reminder, bool? checked) async {
+    if (_isCompletedView && reminder.isCompleted && checked == false) {
+      final bool confirmed = await _confirmUncompleteTodo(reminder);
+      if (!confirmed || !mounted) {
+        return;
+      }
+    }
+    await _toggleComplete(reminder, checked);
   }
 
   Future<void> _toggleComplete(Reminder reminder, bool? checked) async {
@@ -1636,7 +1749,7 @@ class _TodoPageState extends ConsumerState<TodoPage> {
                 ),
                 onDiscardDraft: () => _discardDraftTodo(todos[index].id),
                 onCheckChanged: (bool? checked) =>
-                    _toggleComplete(todos[index], checked),
+                    _onTodoCheckChanged(todos[index], checked),
                 onSubItemsTap: todos[index].hasSubItems
                     ? () => _openSubItems(todos[index])
                     : null,
@@ -1737,6 +1850,9 @@ class _TodoPageState extends ConsumerState<TodoPage> {
     ref.watch(reminderListProvider);
     ref.watch(todoGroupListProvider);
     ref.watch(todoSectionOrderProvider);
+    ref.watch(calendarWeekStartsOnMondayProvider);
+    final TodoSectionExpansionState sectionExpansion =
+        ref.watch(todoSectionExpansionProvider);
     final bool showTodoCreatedDate = ref.watch(showTodoCreatedDateProvider);
     final reminderNotifier = ref.read(reminderListProvider.notifier);
     final List<TodoGroup> todoGroups = ref.watch(todoGroupListProvider);
@@ -1821,6 +1937,8 @@ class _TodoPageState extends ConsumerState<TodoPage> {
                             todoGroups: todoGroups,
                             deadlineHeaderColor: deadlineHeaderColor,
                             normalHeaderColor: normalHeaderColor,
+                            showDeadlineTodos: sectionExpansion.showDeadlineTodos,
+                            showNormalTodos: sectionExpansion.showNormalTodos,
                           ),
                         ],
                       ],
@@ -1939,7 +2057,7 @@ class _TodoPageState extends ConsumerState<TodoPage> {
             Align(
               alignment: Alignment.centerRight,
               child: TextButton(
-                onPressed: () => _onClearCompletedPressed(completedCount),
+                onPressed: _onClearCompletedPressed,
                 style: TextButton.styleFrom(
                   minimumSize: Size.zero,
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -1993,18 +2111,76 @@ class _TodoPageState extends ConsumerState<TodoPage> {
       ];
     }
 
-    return <Widget>[
-      SliverToBoxAdapter(
-        child: _buildTodoConnectedList(
-          todos: completed,
-          reminderNotifier: reminderNotifier,
-          showCreatedDate: showTodoCreatedDate,
-          keyPrefix: 'todo_completed',
-          deleteOnly: true,
+    final Map<CompletedTodoSection, List<Reminder>> grouped =
+        CompletedTodoSectionUtils.groupCompleted(completed);
+    final List<Widget> slivers = <Widget>[];
+    var isFirstSection = true;
+
+    for (final CompletedTodoSection section
+        in CompletedTodoSectionUtils.displayOrder) {
+      final List<Reminder>? sectionTodos = grouped[section];
+      if (sectionTodos == null || sectionTodos.isEmpty) {
+        continue;
+      }
+
+      slivers.add(
+        SliverToBoxAdapter(
+          child: _buildCompletedSectionHeader(
+            context: context,
+            title: CompletedTodoSectionUtils.sectionTitle(section, l10n),
+            count: sectionTodos.length,
+            isFirst: isFirstSection,
+          ),
         ),
+      );
+      isFirstSection = false;
+
+      slivers.add(
+        SliverToBoxAdapter(
+          child: _buildTodoConnectedList(
+            todos: sectionTodos,
+            reminderNotifier: reminderNotifier,
+            showCreatedDate: showTodoCreatedDate,
+            keyPrefix:
+                'todo_completed_${CompletedTodoSectionUtils.sectionKey(section)}',
+            deleteOnly: true,
+          ),
+        ),
+      );
+    }
+
+    slivers.add(const SliverToBoxAdapter(child: SizedBox(height: 20)));
+    return slivers;
+  }
+
+  Widget _buildCompletedSectionHeader({
+    required BuildContext context,
+    required String title,
+    required int count,
+    required bool isFirst,
+  }) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(4, isFirst ? 4 : 16, 4, 8),
+      child: Row(
+        children: <Widget>[
+          Expanded(
+            child: Text(
+              title,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: AppTheme.secondaryLabelColor,
+                    fontWeight: FontWeight.w600,
+                  ),
+            ),
+          ),
+          Text(
+            '$count',
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: AppTheme.secondaryLabelColor,
+                ),
+          ),
+        ],
       ),
-      const SliverToBoxAdapter(child: SizedBox(height: 20)),
-    ];
+    );
   }
 
   double _expandedSectionHeaderExtent(BuildContext context) {
@@ -2037,6 +2213,8 @@ class _TodoPageState extends ConsumerState<TodoPage> {
     required List<TodoGroup> todoGroups,
     required Color deadlineHeaderColor,
     required Color normalHeaderColor,
+    required bool showDeadlineTodos,
+    required bool showNormalTodos,
   }) {
     final List<String> sectionOrder = ref
         .read(todoSectionOrderProvider.notifier)
@@ -2059,7 +2237,7 @@ class _TodoPageState extends ConsumerState<TodoPage> {
           SliverMainAxisGroup(
             slivers: <Widget>[
               _pinnedSectionHeader(
-                extent: _showDeadlineTodos
+                extent: showDeadlineTodos
                     ? _expandedSectionHeaderExtent(context)
                     : _collapsedSectionHeaderExtent(context),
                 child: _buildReorderableSectionHeader(
@@ -2072,10 +2250,11 @@ class _TodoPageState extends ConsumerState<TodoPage> {
                     l10n: l10n,
                     deadlineHeaderColor: deadlineHeaderColor,
                     count: pendingDeadline.length,
+                    showSection: showDeadlineTodos,
                   ),
                 ),
               ),
-              if (_showDeadlineTodos && pendingDeadline.isNotEmpty)
+              if (showDeadlineTodos && pendingDeadline.isNotEmpty)
                 SliverToBoxAdapter(
                   child: _buildTodoConnectedList(
                     todos: pendingDeadline,
@@ -2090,7 +2269,7 @@ class _TodoPageState extends ConsumerState<TodoPage> {
                 child: _buildSectionFooterGap(
                   sectionIndex: sectionIndex,
                   height: _todoGroupSectionGap(
-                    isExpanded: _showDeadlineTodos,
+                    isExpanded: showDeadlineTodos,
                     hasListItems: pendingDeadline.isNotEmpty,
                   ),
                 ),
@@ -2106,7 +2285,7 @@ class _TodoPageState extends ConsumerState<TodoPage> {
           SliverMainAxisGroup(
             slivers: <Widget>[
               _pinnedSectionHeader(
-                extent: _showNormalTodos
+                extent: showNormalTodos
                     ? _expandedSectionHeaderExtent(context)
                     : _collapsedSectionHeaderExtent(context),
                 child: _buildReorderableSectionHeader(
@@ -2120,10 +2299,11 @@ class _TodoPageState extends ConsumerState<TodoPage> {
                     normalHeaderColor: normalHeaderColor,
                     pendingNormal: pendingNormal,
                     count: pendingNormal.length,
+                    showSection: showNormalTodos,
                   ),
                 ),
               ),
-              if (_showNormalTodos &&
+              if (showNormalTodos &&
                   (pendingNormal.isNotEmpty ||
                       _normalHasDraftTodo() ||
                       (_isTodoCrossDragActive && pendingNormal.isEmpty)))
@@ -2140,7 +2320,7 @@ class _TodoPageState extends ConsumerState<TodoPage> {
                 child: _buildSectionFooterGap(
                   sectionIndex: sectionIndex,
                   height: _todoGroupSectionGap(
-                    isExpanded: _showNormalTodos,
+                    isExpanded: showNormalTodos,
                     hasListItems:
                         pendingNormal.isNotEmpty || _normalHasDraftTodo(),
                   ),
@@ -2418,8 +2598,9 @@ class _TodoPageState extends ConsumerState<TodoPage> {
     required AppLocalizations l10n,
     required Color deadlineHeaderColor,
     required int count,
+    required bool showSection,
   }) {
-    if (_showDeadlineTodos) {
+    if (showSection) {
       return Material(
         color: Colors.transparent,
         child: Padding(
@@ -2430,7 +2611,9 @@ class _TodoPageState extends ConsumerState<TodoPage> {
                 child: InkWell(
                   borderRadius: BorderRadius.circular(10),
                   onTap: () {
-                    setState(() => _showDeadlineTodos = !_showDeadlineTodos);
+                    ref
+                        .read(todoSectionExpansionProvider.notifier)
+                        .toggleShowDeadlineTodos();
                   },
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
@@ -2478,7 +2661,9 @@ class _TodoPageState extends ConsumerState<TodoPage> {
           color: Colors.transparent,
           child: InkWell(
             onTap: () {
-              setState(() => _showDeadlineTodos = !_showDeadlineTodos);
+              ref
+                  .read(todoSectionExpansionProvider.notifier)
+                  .toggleShowDeadlineTodos();
             },
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -2519,8 +2704,9 @@ class _TodoPageState extends ConsumerState<TodoPage> {
     required Color normalHeaderColor,
     required List<Reminder> pendingNormal,
     required int count,
+    required bool showSection,
   }) {
-    if (_showNormalTodos) {
+    if (showSection) {
       return Material(
         color: Colors.transparent,
         child: Padding(
@@ -2531,7 +2717,9 @@ class _TodoPageState extends ConsumerState<TodoPage> {
                 child: InkWell(
                   borderRadius: BorderRadius.circular(10),
                   onTap: () {
-                    setState(() => _showNormalTodos = !_showNormalTodos);
+                    ref
+                        .read(todoSectionExpansionProvider.notifier)
+                        .toggleShowNormalTodos();
                   },
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
@@ -2579,7 +2767,9 @@ class _TodoPageState extends ConsumerState<TodoPage> {
           color: Colors.transparent,
           child: InkWell(
             onTap: () {
-              setState(() => _showNormalTodos = !_showNormalTodos);
+              ref
+                  .read(todoSectionExpansionProvider.notifier)
+                  .toggleShowNormalTodos();
             },
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),

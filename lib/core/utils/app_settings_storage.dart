@@ -9,6 +9,9 @@ class AppSettingsStorage {
   static const String _weekStartsOnMondayKey = 'week_starts_on_monday';
   static const String _calendarViewPinnedKey = 'calendar_view_pinned';
   static const String _todoSectionOrderKey = 'todo_section_order';
+  static const String _showDeadlineTodosKey = 'show_deadline_todos';
+  static const String _showNormalTodosKey = 'show_normal_todos';
+  static const String _expandedTodoGroupsKey = 'expanded_todo_groups';
 
   static Future<void> init() async {
     await Hive.openBox<dynamic>(_boxName);
@@ -69,5 +72,36 @@ class AppSettingsStorage {
 
   static Future<void> setTodoSectionOrder(List<String> order) async {
     await _box.put(_todoSectionOrderKey, order);
+  }
+
+  static bool get showDeadlineTodos {
+    return _box.get(_showDeadlineTodosKey) as bool? ?? true;
+  }
+
+  static Future<void> setShowDeadlineTodos(bool value) async {
+    await _box.put(_showDeadlineTodosKey, value);
+  }
+
+  static bool get showNormalTodos {
+    return _box.get(_showNormalTodosKey) as bool? ?? true;
+  }
+
+  static Future<void> setShowNormalTodos(bool value) async {
+    await _box.put(_showNormalTodosKey, value);
+  }
+
+  static Map<String, bool> get expandedTodoGroups {
+    final Map<dynamic, dynamic>? raw =
+        _box.get(_expandedTodoGroupsKey) as Map<dynamic, dynamic>?;
+    if (raw == null) {
+      return <String, bool>{};
+    }
+    return raw.map(
+      (dynamic key, dynamic value) => MapEntry(key.toString(), value == true),
+    );
+  }
+
+  static Future<void> setExpandedTodoGroups(Map<String, bool> value) async {
+    await _box.put(_expandedTodoGroupsKey, value);
   }
 }

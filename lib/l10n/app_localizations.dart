@@ -142,13 +142,50 @@ class AppLocalizations {
       _t('点击右上角「新建」添加', 'Tap “New” at top right to add');
   String get todoCompletedEmptyTitle => _t('还没有已完成事项', 'No completed tasks yet');
   String get todoCompletedSection => _t('已完成', 'Completed');
+  String get todoCompletedSectionToday => _t('今天', 'Today');
+  String get todoCompletedSectionYesterday => _t('昨天', 'Yesterday');
+  String get todoCompletedSectionThisWeek => _t('本周', 'This week');
+  String get todoCompletedSectionThisMonth => _t('本月', 'This month');
+  String get todoCompletedSectionEarlier => _t('更早', 'Earlier');
   String get todoClearCompleted => _t('清除已完成', 'Clear completed');
+  String get todoClearCompletedScopeTitle => _t('清除已完成事项', 'Clear completed tasks');
+  String get todoClearCompletedScopeAll => _t('清除所有', 'Clear all');
+  String get todoClearCompletedScopeAllSubtitle => _t(
+        '删除全部已完成待办',
+        'Delete all completed tasks',
+      );
+  String get todoClearCompletedScopeBeforeThisWeek => _t('清除本周前', 'Clear before this week');
+  String get todoClearCompletedScopeBeforeThisWeekSubtitle => _t(
+        '保留本周完成记录，清除上周日及更早',
+        'Keep this week’s tasks; clear through last Sunday',
+      );
+  String get todoClearCompletedScopeBeforeThisMonth => _t('清除本月前', 'Clear before this month');
+  String get todoClearCompletedScopeBeforeThisMonthSubtitle => _t(
+        '保留本月完成记录，清除上月底及更早',
+        'Keep this month’s tasks; clear through last month-end',
+      );
   String get todoClearCompletedConfirmTitle =>
       _t('清除已完成？', 'Clear completed tasks?');
   String todoClearCompletedConfirmBody(int count) => _t(
         '确定要清除 $count 项已完成待办吗？',
         'Clear $count completed task(s)?',
       );
+  String todoClearCompletedScopeConfirmBody(String scopeLabel, int count) => _t(
+        '确定要$scopeLabel $count 项已完成待办吗？',
+        'Clear $count completed task(s) ($scopeLabel)?',
+      );
+  String get todoClearCompletedNothingToClear =>
+      _t('没有符合条件的已完成待办', 'No completed tasks match this range');
+  String todoClearedCompletedCountSnack(int count) => _t(
+        '已清除 $count 项已完成待办',
+        'Cleared $count completed task(s)',
+      );
+  String get todoUncompleteConfirmTitle => _t('移回待办？', 'Move back to tasks?');
+  String todoUncompleteConfirmBody(String title) => _t(
+        '确定将「$title」移回待办列表吗？',
+        'Move “$title” back to your task list?',
+      );
+  String get todoUncompleteConfirmAction => _t('移回待办', 'Move back');
   String todoDeadlineLabel(String datetime) => _t('截止 $datetime', 'Due $datetime');
   String get todoDeadlineDueToday => _t('今天', 'Tdy');
   String get todoDeadlineDueTomorrow => _t('明天', 'Tmr');

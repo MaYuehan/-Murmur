@@ -907,18 +907,30 @@ class ReminderNotifier extends StateNotifier<List<Reminder>> {
     await deleteReminder(reminderId);
   }
 
-  Future<void> clearCompletedFlexibleReminders({
+  Future<int> clearCompletedFlexibleReminders({
+    required bool Function(Reminder reminder) shouldClear,
     bool alsoRemoveFromCalendar = false,
   }) async {
     final List<Reminder> completedTodos = state
         .where(
-          (Reminder reminder) => reminder.isFlexible && reminder.isCompleted,
+          (Reminder reminder) =>
+              reminder.isFlexible &&
+              reminder.isCompleted &&
+              shouldClear(reminder),
         )
         .toList();
-    final List<String> linkedCalendarIds = completedTodos
-        .where((Reminder reminder) => reminder.calendarLinkedId != null)
-        .map((Reminder reminder) => reminder.calendarLinkedId!)
-        .toList();
+    if (completedTodos.isEmpty) {
+      return 0;
+    }
+
+    final Set<String> todoIdsToRemove =
+        completedTodos.map((Reminder reminder) => reminder.id).toSet();
+    final List<String> linkedCalendarIds = alsoRemoveFromCalendar
+        ? completedTodos
+            .where((Reminder reminder) => reminder.calendarLinkedId != null)
+            .map((Reminder reminder) => reminder.calendarLinkedId!)
+            .toList()
+        : <String>[];
 
     for (final Reminder reminder in completedTodos) {
       await _cancelLinkedPairNotifications(reminder);
@@ -928,9 +940,10 @@ class ReminderNotifier extends StateNotifier<List<Reminder>> {
       if (linkedCalendarIds.contains(reminder.id)) {
         return false;
       }
-      return !(reminder.isFlexible && reminder.isCompleted);
+      return !todoIdsToRemove.contains(reminder.id);
     }).toList();
     await ReminderStorage.saveReminders(state);
+    return completedTodos.length;
   }
 
   Future<void> clearTodoGroupMembership(String groupId) async {

@@ -1129,6 +1129,125 @@ Future<T?> showAppOptionPicker<T>({
   );
 }
 
+class AppActionDialogOption<T> {
+  const AppActionDialogOption({
+    required this.value,
+    required this.label,
+    required this.icon,
+    this.iconColor,
+  });
+
+  final T value;
+  final String label;
+  final IconData icon;
+  final Color? iconColor;
+}
+
+Future<T?> showAppActionDialog<T>({
+  required BuildContext context,
+  required String title,
+  required List<AppActionDialogOption<T>> options,
+  required String cancelLabel,
+}) {
+  return showDialog<T>(
+    context: context,
+    barrierColor: Colors.black.withValues(alpha: 0.35),
+    builder: (BuildContext dialogContext) {
+      return Dialog(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 0, 8, 16),
+              child: Text(
+                title,
+                textAlign: TextAlign.center,
+                style: Theme.of(dialogContext).textTheme.titleMedium,
+              ),
+            ),
+            AppGroupedSection(
+              children: <Widget>[
+                for (int index = 0; index < options.length; index++)
+                  AppListTile(
+                    title: options[index].label,
+                    leadingIcon: options[index].icon,
+                    leadingIconColor:
+                        options[index].iconColor ?? AppTheme.primaryColor,
+                    showDivider: index < options.length - 1,
+                    onTap: () =>
+                        Navigator.of(dialogContext).pop(options[index].value),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            AppGroupedSection(
+              children: <Widget>[
+                Material(
+                  color: AppTheme.cardColor,
+                  child: InkWell(
+                    onTap: () => Navigator.of(dialogContext).pop(),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      child: Center(
+                        child: Text(
+                          cancelLabel,
+                          style:
+                              Theme.of(dialogContext).textTheme.bodyLarge?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                    color: AppTheme.textPrimaryColor,
+                                  ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+    },
+  );
+}
+
+Future<bool> showAppConfirmDialog({
+  required BuildContext context,
+  required String title,
+  required String message,
+  required String cancelLabel,
+  required String confirmLabel,
+  bool destructive = false,
+}) async {
+  final bool? result = await showDialog<bool>(
+    context: context,
+    builder: (BuildContext dialogContext) {
+      return AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(cancelLabel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(
+              confirmLabel,
+              style: destructive
+                  ? const TextStyle(color: AppTheme.destructiveColor)
+                  : null,
+            ),
+          ),
+        ],
+      );
+    },
+  );
+  return result == true;
+}
+
 class AppListTile extends StatelessWidget {
   const AppListTile({
     super.key,
