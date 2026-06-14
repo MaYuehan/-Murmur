@@ -28,6 +28,63 @@ enum _DeleteTodoGroupChoice {
   confirmEmptyGroup,
 }
 
+class _SectionDragVisualState {
+  const _SectionDragVisualState({
+    this.draggingSectionId,
+    this.hoverIndex,
+    this.insertAtTop = false,
+  });
+
+  final String? draggingSectionId;
+  final int? hoverIndex;
+  final bool insertAtTop;
+
+  bool get isActive =>
+      draggingSectionId != null || hoverIndex != null || insertAtTop;
+}
+
+class _TodoDragVisualState {
+  const _TodoDragVisualState({
+    this.draggingTodoId,
+    this.sourceListKey,
+    this.targetListKey,
+    this.hoverRowIndex,
+    this.insertAtTop = false,
+  });
+
+  final String? draggingTodoId;
+  final String? sourceListKey;
+  final String? targetListKey;
+  final int? hoverRowIndex;
+  final bool insertAtTop;
+
+  bool get isActive =>
+      draggingTodoId != null ||
+      targetListKey != null ||
+      hoverRowIndex != null ||
+      insertAtTop;
+}
+
+class _TodoDropListContext {
+  const _TodoDropListContext({
+    required this.todos,
+    required this.targetTodoGroupId,
+  });
+
+  final List<Reminder> todos;
+  final String? targetTodoGroupId;
+}
+
+class _SectionDragOrderContext {
+  const _SectionDragOrderContext({
+    required this.orderedSectionIds,
+    required this.todoGroups,
+  });
+
+  final List<String> orderedSectionIds;
+  final List<TodoGroup> todoGroups;
+}
+
 class TodoPage extends ConsumerStatefulWidget {
   const TodoPage({super.key});
 
@@ -39,6 +96,8 @@ class _TodoPageState extends ConsumerState<TodoPage> {
   static const double _todoGroupListBottomPadding = 8;
   static const double _todoGroupExpandedSectionGap = 14;
   static const double _todoGroupCollapsedSectionGap = 6;
+  static const double _sectionHeaderDragShiftOffset = 14;
+  static const double _todoRowDragShiftOffset = 14;
 
   bool _isCompletedView = false;
   bool _showDeadlineTodos = true;
@@ -51,9 +110,503 @@ class _TodoPageState extends ConsumerState<TodoPage> {
   String? _pendingFocusTodoId;
   bool _pendingFocusSelectAll = true;
   final Set<String> _draftTodoIds = <String>{};
+  final ValueNotifier<_SectionDragVisualState> _sectionDragVisualState =
+      ValueNotifier<_SectionDragVisualState>(const _SectionDragVisualState());
+  final ValueNotifier<_TodoDragVisualState> _todoDragVisualState =
+      ValueNotifier<_TodoDragVisualState>(const _TodoDragVisualState());
+  final Map<String, _TodoDropListContext> _todoDropListContexts =
+      <String, _TodoDropListContext>{};
+  final Map<String, Map<int, GlobalKey>> _todoRowMeasureKeys =
+      <String, Map<int, GlobalKey>>{};
+  final Map<String, GlobalKey> _todoEmptyDropMeasureKeys =
+      <String, GlobalKey>{};
+  final Map<int, GlobalKey> _sectionHeaderMeasureKeys = <int, GlobalKey>{};
+  final Map<int, GlobalKey> _sectionFooterMeasureKeys = <int, GlobalKey>{};
+  _SectionDragOrderContext? _sectionDragOrderContext;
+  Offset? _todoDragAnchorOffset;
+  Size? _todoDragFeedbackSize;
+  Offset? _sectionDragAnchorOffset;
+  Size? _sectionDragFeedbackSize;
+
+  void _clearSectionDragState() {
+    _sectionDragAnchorOffset = null;
+    _sectionDragFeedbackSize = null;
+    if (!_sectionDragVisualState.value.isActive) {
+      return;
+    }
+    _sectionDragVisualState.value = const _SectionDragVisualState();
+  }
+
+  void _clearTodoDragState() {
+    _todoDragAnchorOffset = null;
+    _todoDragFeedbackSize = null;
+    if (!_todoDragVisualState.value.isActive) {
+      return;
+    }
+    _todoDragVisualState.value = const _TodoDragVisualState();
+  }
+
+  bool _shouldShiftSectionHeaderDown(
+    int sectionIndex,
+    _SectionDragVisualState dragState,
+  ) {
+    if (dragState.draggingSectionId == null) {
+      return false;
+    }
+    if (dragState.insertAtTop) {
+      return true;
+    }
+    final int? hoverIndex = dragState.hoverIndex;
+    if (hoverIndex == null) {
+      return false;
+    }
+    return sectionIndex > hoverIndex;
+  }
+
+  bool _shouldShiftTodoRowDown({
+    required String listKey,
+    required int rowIndex,
+    required _TodoDragVisualState dragState,
+  }) {
+    if (dragState.draggingTodoId == null ||
+        dragState.targetListKey != listKey) {
+      return false;
+    }
+    if (dragState.insertAtTop) {
+      return true;
+    }
+    final int? hoverRowIndex = dragState.hoverRowIndex;
+    if (hoverRowIndex == null) {
+      return false;
+    }
+    return rowIndex > hoverRowIndex;
+  }
+
+  GlobalKey _todoRowMeasureKey(String listKey, int rowIndex) {
+    final Map<int, GlobalKey> keys = _todoRowMeasureKeys.putIfAbsent(
+      listKey,
+      () => <int, GlobalKey>{},
+    );
+    return keys.putIfAbsent(rowIndex, GlobalKey.new);
+  }
+
+  GlobalKey _todoEmptyDropMeasureKey(String listKey) {
+    return _todoEmptyDropMeasureKeys.putIfAbsent(listKey, GlobalKey.new);
+  }
+
+  GlobalKey _sectionHeaderMeasureKey(int sectionIndex) {
+    return _sectionHeaderMeasureKeys.putIfAbsent(sectionIndex, GlobalKey.new);
+  }
+
+  GlobalKey _sectionFooterMeasureKey(int sectionIndex) {
+    return _sectionFooterMeasureKeys.putIfAbsent(sectionIndex, GlobalKey.new);
+  }
+
+  Rect _bottomHalfOfRect(Rect rect) {
+    return Rect.fromLTWH(
+      rect.left,
+      rect.top + rect.height / 2,
+      rect.width,
+      rect.height / 2,
+    );
+  }
+
+  Rect _topHalfOfRect(Rect rect) {
+    return Rect.fromLTWH(
+      rect.left,
+      rect.top,
+      rect.width,
+      rect.height / 2,
+    );
+  }
+
+  Rect? _sectionBoundsGlobalRect(int sectionIndex) {
+    final RenderBox? headerBox = _sectionHeaderMeasureKeys[sectionIndex]
+        ?.currentContext
+        ?.findRenderObject() as RenderBox?;
+    if (headerBox == null || !headerBox.hasSize) {
+      return null;
+    }
+
+    final RenderBox? footerBox = _sectionFooterMeasureKeys[sectionIndex]
+        ?.currentContext
+        ?.findRenderObject() as RenderBox?;
+    if (footerBox != null && footerBox.hasSize) {
+      final Offset headerTopLeft = headerBox.localToGlobal(Offset.zero);
+      final Offset footerBottomRight = footerBox.localToGlobal(
+        Offset(footerBox.size.width, footerBox.size.height),
+      );
+      final Rect sectionBounds = Rect.fromLTRB(
+        headerTopLeft.dx,
+        headerTopLeft.dy,
+        footerBottomRight.dx,
+        footerBottomRight.dy,
+      );
+      if (sectionBounds.height > 0) {
+        return sectionBounds;
+      }
+    }
+
+    return headerBox.localToGlobal(Offset.zero) & headerBox.size;
+  }
+
+  Rect? _sectionBottomHalfGlobalRect(int sectionIndex) {
+    final Rect? sectionBounds = _sectionBoundsGlobalRect(sectionIndex);
+    if (sectionBounds == null) {
+      return null;
+    }
+    return _bottomHalfOfRect(sectionBounds);
+  }
+
+  Rect? _sectionTopHalfGlobalRect(int sectionIndex) {
+    final Rect? sectionBounds = _sectionBoundsGlobalRect(sectionIndex);
+    if (sectionBounds == null) {
+      return null;
+    }
+    return _topHalfOfRect(sectionBounds);
+  }
+
+  Rect _sectionDragFeedbackGlobalRect(Offset pointerGlobal) {
+    if (_sectionDragAnchorOffset == null || _sectionDragFeedbackSize == null) {
+      return Rect.zero;
+    }
+    final Offset topLeft = pointerGlobal - _sectionDragAnchorOffset!;
+    return topLeft & _sectionDragFeedbackSize!;
+  }
+
+  void _updateSectionDragHoverFromFeedback(Offset pointerGlobal) {
+    final _SectionDragVisualState current = _sectionDragVisualState.value;
+    final _SectionDragOrderContext? orderContext = _sectionDragOrderContext;
+    if (current.draggingSectionId == null || orderContext == null) {
+      return;
+    }
+
+    final Rect feedbackRect = _sectionDragFeedbackGlobalRect(pointerGlobal);
+    if (feedbackRect.isEmpty) {
+      return;
+    }
+
+    int? bestSectionIndex;
+    bool bestInsertAtTop = false;
+    double bestOverlap = 0;
+
+    if (orderContext.orderedSectionIds.isNotEmpty) {
+      final String firstSectionId = orderContext.orderedSectionIds.first;
+      if (firstSectionId != current.draggingSectionId) {
+        final Rect? topHalf = _sectionTopHalfGlobalRect(0);
+        if (topHalf != null) {
+          final double overlap = _rectOverlapArea(feedbackRect, topHalf);
+          if (overlap > bestOverlap) {
+            bestOverlap = overlap;
+            bestSectionIndex = 0;
+            bestInsertAtTop = true;
+          }
+        }
+      }
+    }
+
+    for (final MapEntry<int, GlobalKey> entry
+        in _sectionHeaderMeasureKeys.entries) {
+      final int sectionIndex = entry.key;
+      if (sectionIndex < 0 ||
+          sectionIndex >= orderContext.orderedSectionIds.length) {
+        continue;
+      }
+      if (orderContext.orderedSectionIds[sectionIndex] ==
+          current.draggingSectionId) {
+        continue;
+      }
+
+      final Rect? bottomHalf = _sectionBottomHalfGlobalRect(sectionIndex);
+      if (bottomHalf == null) {
+        continue;
+      }
+
+      final double overlap = _rectOverlapArea(
+        feedbackRect,
+        bottomHalf,
+      );
+      if (overlap > bestOverlap) {
+        bestOverlap = overlap;
+        bestSectionIndex = sectionIndex;
+        bestInsertAtTop = false;
+      }
+    }
+
+    if (bestOverlap <= 0) {
+      if (current.hoverIndex != null || current.insertAtTop) {
+        _sectionDragVisualState.value = _SectionDragVisualState(
+          draggingSectionId: current.draggingSectionId,
+        );
+      }
+      return;
+    }
+
+    if (current.hoverIndex != bestSectionIndex ||
+        current.insertAtTop != bestInsertAtTop) {
+      _sectionDragVisualState.value = _SectionDragVisualState(
+        draggingSectionId: current.draggingSectionId,
+        hoverIndex: bestSectionIndex,
+        insertAtTop: bestInsertAtTop,
+      );
+    }
+  }
+
+  void _finishSectionDragReorder() {
+    final _SectionDragVisualState state = _sectionDragVisualState.value;
+    final _SectionDragOrderContext? orderContext = _sectionDragOrderContext;
+    if (state.draggingSectionId == null ||
+        orderContext == null ||
+        (!state.insertAtTop && state.hoverIndex == null)) {
+      return;
+    }
+
+    final List<String> orderedSectionIds = orderContext.orderedSectionIds;
+    final int fromIndex = orderedSectionIds.indexOf(state.draggingSectionId!);
+    if (fromIndex < 0) {
+      return;
+    }
+
+    int toIndex;
+    if (state.insertAtTop) {
+      toIndex = 0;
+    } else {
+      toIndex = state.hoverIndex! + 1;
+      if (fromIndex < toIndex) {
+        toIndex -= 1;
+      }
+    }
+    if (toIndex < 0 ||
+        toIndex >= orderedSectionIds.length ||
+        fromIndex == toIndex) {
+      return;
+    }
+
+    ref.read(todoSectionOrderProvider.notifier).reorderSections(
+          fromIndex: fromIndex,
+          toIndex: toIndex,
+          groups: orderContext.todoGroups,
+        );
+  }
+
+  Rect _todoDragFeedbackGlobalRect(Offset pointerGlobal) {
+    if (_todoDragAnchorOffset == null || _todoDragFeedbackSize == null) {
+      return Rect.zero;
+    }
+    final Offset topLeft = pointerGlobal - _todoDragAnchorOffset!;
+    return topLeft & _todoDragFeedbackSize!;
+  }
+
+  Rect _rowBottomHalfGlobalRect(RenderBox box) {
+    return _bottomHalfOfRect(box.localToGlobal(Offset.zero) & box.size);
+  }
+
+  Rect _rowTopHalfGlobalRect(RenderBox box) {
+    return _topHalfOfRect(box.localToGlobal(Offset.zero) & box.size);
+  }
+
+  bool _shouldSkipTodoTopInsert({
+    required String listKey,
+    required _TodoDragVisualState current,
+  }) {
+    if (current.sourceListKey != listKey) {
+      return false;
+    }
+    final _TodoDropListContext? listContext = _todoDropListContexts[listKey];
+    if (listContext == null || listContext.todos.isEmpty) {
+      return false;
+    }
+    return listContext.todos.first.id == current.draggingTodoId;
+  }
+
+  double _rectOverlapArea(Rect a, Rect b) {
+    final Rect intersection = a.intersect(b);
+    if (intersection.isEmpty) {
+      return 0;
+    }
+    return intersection.width * intersection.height;
+  }
+
+  void _updateTodoDragHoverFromFeedback(Offset pointerGlobal) {
+    final _TodoDragVisualState current = _todoDragVisualState.value;
+    if (current.draggingTodoId == null) {
+      return;
+    }
+
+    final Rect feedbackRect = _todoDragFeedbackGlobalRect(pointerGlobal);
+    if (feedbackRect.isEmpty) {
+      return;
+    }
+
+    String? bestListKey;
+    int? bestRowIndex;
+    bool bestInsertAtTop = false;
+    double bestOverlap = 0;
+
+    for (final MapEntry<String, _TodoDropListContext> entry
+        in _todoDropListContexts.entries) {
+      final String listKey = entry.key;
+      final _TodoDropListContext listContext = entry.value;
+      if (!_canDropTodoIntoList(listKey, current.draggingTodoId!)) {
+        continue;
+      }
+
+      if (listContext.todos.isEmpty) {
+        final RenderBox? box = _todoEmptyDropMeasureKey(listKey)
+            .currentContext
+            ?.findRenderObject() as RenderBox?;
+        if (box == null || !box.hasSize) {
+          continue;
+        }
+        final Rect dropZone = box.localToGlobal(Offset.zero) & box.size;
+        final double overlap = _rectOverlapArea(feedbackRect, dropZone);
+        if (overlap > bestOverlap) {
+          bestOverlap = overlap;
+          bestListKey = listKey;
+          bestRowIndex = -1;
+          bestInsertAtTop = false;
+        }
+        continue;
+      }
+
+      if (!_shouldSkipTodoTopInsert(listKey: listKey, current: current)) {
+        final GlobalKey? firstRowKey = _todoRowMeasureKeys[listKey]?[0];
+        final RenderBox? firstRowBox = firstRowKey
+            ?.currentContext
+            ?.findRenderObject() as RenderBox?;
+        if (firstRowBox != null && firstRowBox.hasSize) {
+          final double overlap = _rectOverlapArea(
+            feedbackRect,
+            _rowTopHalfGlobalRect(firstRowBox),
+          );
+          if (overlap > bestOverlap) {
+            bestOverlap = overlap;
+            bestListKey = listKey;
+            bestRowIndex = 0;
+            bestInsertAtTop = true;
+          }
+        }
+      }
+
+      final Map<int, GlobalKey>? rowKeys = _todoRowMeasureKeys[listKey];
+      if (rowKeys == null) {
+        continue;
+      }
+
+      for (final MapEntry<int, GlobalKey> rowEntry in rowKeys.entries) {
+        final RenderBox? box = rowEntry.value.currentContext?.findRenderObject()
+            as RenderBox?;
+        if (box == null || !box.hasSize) {
+          continue;
+        }
+        final double overlap = _rectOverlapArea(
+          feedbackRect,
+          _rowBottomHalfGlobalRect(box),
+        );
+        if (overlap > bestOverlap) {
+          bestOverlap = overlap;
+          bestListKey = listKey;
+          bestRowIndex = rowEntry.key;
+          bestInsertAtTop = false;
+        }
+      }
+    }
+
+    if (bestOverlap <= 0) {
+      if (current.targetListKey != null ||
+          current.hoverRowIndex != null ||
+          current.insertAtTop) {
+        _todoDragVisualState.value = _TodoDragVisualState(
+          draggingTodoId: current.draggingTodoId,
+          sourceListKey: current.sourceListKey,
+        );
+      }
+      return;
+    }
+
+    if (current.targetListKey != bestListKey ||
+        current.hoverRowIndex != bestRowIndex ||
+        current.insertAtTop != bestInsertAtTop) {
+      _todoDragVisualState.value = _TodoDragVisualState(
+        draggingTodoId: current.draggingTodoId,
+        sourceListKey: current.sourceListKey,
+        targetListKey: bestListKey,
+        hoverRowIndex: bestRowIndex,
+        insertAtTop: bestInsertAtTop,
+      );
+    }
+  }
+
+  void _finishTodoDragDrop() {
+    final _TodoDragVisualState state = _todoDragVisualState.value;
+    final String? draggedId = state.draggingTodoId;
+    final String? targetListKey = state.targetListKey;
+    if (draggedId == null ||
+        targetListKey == null ||
+        (!state.insertAtTop && state.hoverRowIndex == null)) {
+      return;
+    }
+
+    final _TodoDropListContext? listContext = _todoDropListContexts[targetListKey];
+    if (listContext == null ||
+        !_canDropTodoIntoList(targetListKey, draggedId)) {
+      return;
+    }
+
+    final int insertIndex;
+    if (state.insertAtTop) {
+      insertIndex = 0;
+    } else if (state.hoverRowIndex! < 0) {
+      insertIndex = 0;
+    } else {
+      insertIndex = state.hoverRowIndex! + 1;
+    }
+
+    _moveTodoAtInsertGap(
+      targetList: listContext.todos,
+      draggedId: draggedId,
+      insertIndex: insertIndex,
+      targetTodoGroupId: listContext.targetTodoGroupId,
+    );
+  }
+
+  Widget _buildTodoRowShiftWrapper({
+    required String listKey,
+    required int rowIndex,
+    required Widget child,
+  }) {
+    return ValueListenableBuilder<_TodoDragVisualState>(
+      valueListenable: _todoDragVisualState,
+      builder: (
+        BuildContext context,
+        _TodoDragVisualState dragState,
+        Widget? wrappedChild,
+      ) {
+        final bool shouldShiftDown = _shouldShiftTodoRowDown(
+          listKey: listKey,
+          rowIndex: rowIndex,
+          dragState: dragState,
+        );
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+          transform: Matrix4.translationValues(
+            0,
+            shouldShiftDown ? _todoRowDragShiftOffset : 0,
+            0,
+          ),
+          transformAlignment: Alignment.topCenter,
+          child: wrappedChild,
+        );
+      },
+      child: child,
+    );
+  }
 
   @override
   void dispose() {
+    _sectionDragVisualState.dispose();
+    _todoDragVisualState.dispose();
     _newTodoGroupNameController.dispose();
     _newTodoGroupFocusNode.dispose();
     super.dispose();
@@ -194,55 +747,83 @@ class _TodoPageState extends ConsumerState<TodoPage> {
   }) {
     final double headerWidth =
         MediaQuery.sizeOf(context).width - AppTheme.pagePadding * 2;
-    return LongPressDraggable<String>(
-      data: sectionId,
-      feedback: Material(
-        color: Colors.transparent,
-        child: SizedBox(
-          width: headerWidth,
-          child: Opacity(
-            opacity: 0.92,
-            child: child,
+
+    return ValueListenableBuilder<_SectionDragVisualState>(
+      valueListenable: _sectionDragVisualState,
+      builder: (
+        BuildContext context,
+        _SectionDragVisualState dragState,
+        Widget? _,
+      ) {
+        final bool shouldShiftDown =
+            _shouldShiftSectionHeaderDown(sectionIndex, dragState);
+
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+          transform: Matrix4.translationValues(
+            0,
+            shouldShiftDown ? _sectionHeaderDragShiftOffset : 0,
+            0,
           ),
-        ),
-      ),
-      childWhenDragging: Opacity(
-        opacity: 0.35,
-        child: child,
-      ),
-      child: DragTarget<String>(
-        onWillAcceptWithDetails: (DragTargetDetails<String> details) {
-          return details.data != sectionId;
-        },
-        onAcceptWithDetails: (DragTargetDetails<String> details) {
-          final int fromIndex = orderedSectionIds.indexOf(details.data);
-          if (fromIndex < 0 || fromIndex == sectionIndex) {
-            return;
-          }
-          ref.read(todoSectionOrderProvider.notifier).reorderSections(
-                fromIndex: fromIndex,
-                toIndex: sectionIndex,
-                groups: todoGroups,
-              );
-        },
-        builder: (
-          BuildContext context,
-          List<String?> candidateData,
-          List<dynamic> rejectedData,
-        ) {
-          final bool isDropTarget = candidateData.isNotEmpty;
-          return AnimatedContainer(
-            duration: const Duration(milliseconds: 120),
-            decoration: isDropTarget
-                ? BoxDecoration(
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: AppTheme.primaryColor, width: 1.5),
-                  )
-                : null,
-            child: child,
-          );
-        },
-      ),
+          transformAlignment: Alignment.topCenter,
+          child: KeyedSubtree(
+            key: _sectionHeaderMeasureKey(sectionIndex),
+            child: Builder(
+              builder: (BuildContext headerBuilderContext) {
+                return Listener(
+                  onPointerDown: (PointerDownEvent event) {
+                    _sectionDragAnchorOffset = event.localPosition;
+                  },
+                  child: LongPressDraggable<String>(
+                    data: sectionId,
+                    onDragStarted: () {
+                      final RenderObject? renderObject =
+                          headerBuilderContext.findRenderObject();
+                      if (renderObject is RenderBox && renderObject.hasSize) {
+                        _sectionDragFeedbackSize = renderObject.size;
+                      }
+                      _sectionDragVisualState.value = _SectionDragVisualState(
+                        draggingSectionId: sectionId,
+                      );
+                    },
+                    onDragUpdate: (DragUpdateDetails details) {
+                      _updateSectionDragHoverFromFeedback(
+                        details.globalPosition,
+                      );
+                    },
+                    onDragEnd: (_) {
+                      _finishSectionDragReorder();
+                      _clearSectionDragState();
+                    },
+                    onDraggableCanceled: (_, __) => _clearSectionDragState(),
+                    feedback: Material(
+                      color: Colors.transparent,
+                      child: SizedBox(
+                        width: headerWidth,
+                        child: Opacity(
+                          opacity: 0.92,
+                          child: KeyedSubtree(
+                            key: ValueKey<String>(
+                              'section_drag_feedback_$sectionId',
+                            ),
+                            child: child,
+                          ),
+                        ),
+                      ),
+                    ),
+                    childWhenDragging: Opacity(
+                      opacity: 0.35,
+                      child: child,
+                    ),
+                    child: child,
+                  ),
+                );
+              },
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -259,70 +840,121 @@ class _TodoPageState extends ConsumerState<TodoPage> {
     return null;
   }
 
+  static const String _todoDeadlineListKey = 'todo_deadline';
+  static const String _todoNormalListKey = 'todo_normal';
+
+  bool _isDeadlineTodoListKey(String listKey) =>
+      listKey == _todoDeadlineListKey;
+
+  String _todoGroupListKey(String groupId) => 'todo_group:$groupId';
+
+  bool _canDropTodoIntoList(String listKey, String draggedId) {
+    if (_isDeadlineTodoListKey(listKey)) {
+      return false;
+    }
+    final Reminder? reminder =
+        ref.read(reminderListProvider.notifier).getReminderById(draggedId);
+    return reminder != null && !reminder.hasDeadline;
+  }
+
+  bool get _isTodoCrossDragActive =>
+      _todoDragVisualState.value.draggingTodoId != null;
+
   Widget _buildReorderableTodoRow({
     required Reminder reminder,
-    required int index,
+    required int rowIndex,
     required List<Reminder> todos,
+    required String listKey,
+    required String? targetTodoGroupId,
     required bool reorderEnabled,
+    required bool dropEnabled,
     required Widget child,
   }) {
-    if (!reorderEnabled || _editingTodoId != null) {
+    if (_editingTodoId != null) {
+      return child;
+    }
+    if (!reorderEnabled && !dropEnabled) {
       return child;
     }
 
     final double rowWidth =
         MediaQuery.sizeOf(context).width - AppTheme.pagePadding * 2;
-    return LongPressDraggable<String>(
-      data: reminder.id,
-      feedback: Material(
-        color: Colors.transparent,
-        child: SizedBox(
-          width: rowWidth,
-          child: Opacity(
-            opacity: 0.92,
+
+    if (!reorderEnabled) {
+      return child;
+    }
+
+    return Builder(
+      builder: (BuildContext rowBuilderContext) {
+        return Listener(
+          onPointerDown: (PointerDownEvent event) {
+            _todoDragAnchorOffset = event.localPosition;
+          },
+          child: LongPressDraggable<String>(
+            data: reminder.id,
+            onDragStarted: () {
+              final RenderObject? renderObject =
+                  rowBuilderContext.findRenderObject();
+              if (renderObject is RenderBox && renderObject.hasSize) {
+                _todoDragFeedbackSize = renderObject.size;
+              }
+              _todoDragVisualState.value = _TodoDragVisualState(
+                draggingTodoId: reminder.id,
+                sourceListKey: listKey,
+              );
+            },
+            onDragUpdate: (DragUpdateDetails details) {
+              _updateTodoDragHoverFromFeedback(details.globalPosition);
+            },
+            onDragEnd: (_) {
+              _finishTodoDragDrop();
+              _clearTodoDragState();
+            },
+            onDraggableCanceled: (_, __) => _clearTodoDragState(),
+            feedback: Material(
+              color: Colors.transparent,
+              child: SizedBox(
+                width: rowWidth,
+                child: Opacity(
+                  opacity: 0.92,
+                  child: KeyedSubtree(
+                    key: ValueKey<String>('todo_drag_feedback_${reminder.id}'),
+                    child: child,
+                  ),
+                ),
+              ),
+            ),
+            childWhenDragging: Opacity(
+              opacity: 0.35,
+              child: child,
+            ),
             child: child,
           ),
-        ),
-      ),
-      childWhenDragging: Opacity(
-        opacity: 0.35,
-        child: child,
-      ),
-      child: DragTarget<String>(
-        onWillAcceptWithDetails: (DragTargetDetails<String> details) {
-          return details.data != reminder.id;
-        },
-        onAcceptWithDetails: (DragTargetDetails<String> details) {
-          final int fromIndex = todos.indexWhere(
-            (Reminder item) => item.id == details.data,
-          );
-          if (fromIndex < 0 || fromIndex == index) {
-            return;
-          }
-          ref.read(reminderListProvider.notifier).reorderFlexibleTodoInList(
-                listContext: todos,
-                fromIndex: fromIndex,
-                toIndex: index,
-              );
-        },
-        builder: (
-          BuildContext context,
-          List<String?> candidateData,
-          List<dynamic> rejectedData,
-        ) {
-          final bool isDropTarget = candidateData.isNotEmpty;
-          return AnimatedContainer(
-            duration: const Duration(milliseconds: 120),
-            decoration: isDropTarget
-                ? BoxDecoration(
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: AppTheme.primaryColor, width: 1.5),
-                  )
-                : null,
-            child: child,
-          );
-        },
-      ),
+        );
+      },
+    );
+  }
+
+  void _moveTodoAtInsertGap({
+    required List<Reminder> targetList,
+    required String draggedId,
+    required int insertIndex,
+    required String? targetTodoGroupId,
+  }) {
+    ref.read(reminderListProvider.notifier).moveFlexibleTodoToInsertIndex(
+          reminderId: draggedId,
+          targetList: targetList,
+          insertIndex: insertIndex,
+          targetTodoGroupId: targetTodoGroupId,
+        );
+  }
+
+  Widget _buildTodoListDivider() {
+    return const Divider(
+      height: 1,
+      thickness: 0.5,
+      indent: 16,
+      color: AppTheme.separatorColor,
     );
   }
 
@@ -915,11 +1547,24 @@ class _TodoPageState extends ConsumerState<TodoPage> {
     required ReminderNotifier reminderNotifier,
     required bool showCreatedDate,
     String keyPrefix = 'todo_connected',
+    String? targetTodoGroupId,
     double bottomPadding = _todoGroupListBottomPadding,
     bool deleteOnly = false,
     bool reorderEnabled = true,
+    bool dropEnabled = true,
   }) {
-    final bool canReorder = reorderEnabled && !deleteOnly;
+    final bool canDrag = reorderEnabled && !deleteOnly;
+    final bool canDrop = dropEnabled && !deleteOnly;
+    if (canDrop) {
+      _todoDropListContexts[keyPrefix] = _TodoDropListContext(
+        todos: todos,
+        targetTodoGroupId: targetTodoGroupId,
+      );
+      _todoRowMeasureKeys[keyPrefix]
+          ?.removeWhere((int index, GlobalKey _) => index >= todos.length);
+    } else {
+      _todoDropListContexts.remove(keyPrefix);
+    }
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(AppTheme.groupedRadius),
@@ -933,12 +1578,32 @@ class _TodoPageState extends ConsumerState<TodoPage> {
       ),
       child: AppGroupedSection(
         children: <Widget>[
-          for (int index = 0; index < todos.length; index++) ...<Widget>[
-            _buildReorderableTodoRow(
-              reminder: todos[index],
-              index: index,
+          if (todos.isEmpty && canDrop)
+            _buildTodoEmptyDropTarget(
+              listKey: keyPrefix,
               todos: todos,
-              reorderEnabled: canReorder,
+              targetTodoGroupId: targetTodoGroupId,
+            ),
+          for (int index = 0; index < todos.length; index++) ...<Widget>[
+            if (index > 0)
+              _buildTodoRowShiftWrapper(
+                listKey: keyPrefix,
+                rowIndex: index,
+                child: _buildTodoListDivider(),
+              ),
+            _buildTodoRowShiftWrapper(
+              listKey: keyPrefix,
+              rowIndex: index,
+              child: KeyedSubtree(
+                key: _todoRowMeasureKey(keyPrefix, index),
+                child: _buildReorderableTodoRow(
+              reminder: todos[index],
+              rowIndex: index,
+              todos: todos,
+              listKey: keyPrefix,
+              targetTodoGroupId: targetTodoGroupId,
+              reorderEnabled: canDrag,
+              dropEnabled: canDrop,
               child: _buildTodoSlidable(
                 reminder: todos[index],
                 reminderNotifier: reminderNotifier,
@@ -978,17 +1643,38 @@ class _TodoPageState extends ConsumerState<TodoPage> {
               ),
             ),
             ),
-            if (index < todos.length - 1)
-              const Divider(
-                height: 1,
-                thickness: 0.5,
-                indent: 16,
-                color: AppTheme.separatorColor,
-              ),
+            ),
+            ),
           ],
           if (bottomPadding > 0) SizedBox(height: bottomPadding),
         ],
       ),
+    );
+  }
+
+  Widget _buildTodoEmptyDropTarget({
+    required String listKey,
+    required List<Reminder> todos,
+    required String? targetTodoGroupId,
+  }) {
+    return ValueListenableBuilder<_TodoDragVisualState>(
+      valueListenable: _todoDragVisualState,
+      builder: (
+        BuildContext context,
+        _TodoDragVisualState dragState,
+        Widget? _,
+      ) {
+        if (dragState.draggingTodoId == null) {
+          return const SizedBox.shrink();
+        }
+        return KeyedSubtree(
+          key: _todoEmptyDropMeasureKey(listKey),
+          child: const SizedBox(
+            height: 44,
+            width: double.infinity,
+          ),
+        );
+      },
     );
   }
 
@@ -1098,39 +1784,48 @@ class _TodoPageState extends ConsumerState<TodoPage> {
                 completedCount: completed.length,
               ),
               Expanded(
-                child: CustomScrollView(
-                  slivers: <Widget>[
-                    if (_isCompletedView)
-                      ..._buildCompletedTodoListSlivers(
-                        context: context,
-                        l10n: l10n,
-                        reminderNotifier: reminderNotifier,
-                        showTodoCreatedDate: showTodoCreatedDate,
-                        completed: completed,
-                      )
-                    else ...<Widget>[
-                      if (showEmptyState)
-                        SliverToBoxAdapter(
-                          child: AppEmptyState(
-                            icon: Icons.checklist_outlined,
-                            title: l10n.todoEmptyTitle,
-                            subtitle: l10n.todoEmptySubtitle,
+                child: ValueListenableBuilder<_TodoDragVisualState>(
+                  valueListenable: _todoDragVisualState,
+                  builder: (
+                    BuildContext context,
+                    _TodoDragVisualState _,
+                    Widget? __,
+                  ) {
+                    return CustomScrollView(
+                      slivers: <Widget>[
+                        if (_isCompletedView)
+                          ..._buildCompletedTodoListSlivers(
+                            context: context,
+                            l10n: l10n,
+                            reminderNotifier: reminderNotifier,
+                            showTodoCreatedDate: showTodoCreatedDate,
+                            completed: completed,
+                          )
+                        else ...<Widget>[
+                          if (showEmptyState)
+                            SliverToBoxAdapter(
+                              child: AppEmptyState(
+                                icon: Icons.checklist_outlined,
+                                title: l10n.todoEmptyTitle,
+                                subtitle: l10n.todoEmptySubtitle,
+                              ),
+                            ),
+                          ..._buildTodoListSlivers(
+                            context: context,
+                            l10n: l10n,
+                            reminderNotifier: reminderNotifier,
+                            showTodoCreatedDate: showTodoCreatedDate,
+                            pending: pending,
+                            pendingDeadline: pendingDeadline,
+                            pendingNormal: pendingNormal,
+                            todoGroups: todoGroups,
+                            deadlineHeaderColor: deadlineHeaderColor,
+                            normalHeaderColor: normalHeaderColor,
                           ),
-                        ),
-                      ..._buildTodoListSlivers(
-                        context: context,
-                        l10n: l10n,
-                        reminderNotifier: reminderNotifier,
-                        showTodoCreatedDate: showTodoCreatedDate,
-                        pending: pending,
-                        pendingDeadline: pendingDeadline,
-                        pendingNormal: pendingNormal,
-                        todoGroups: todoGroups,
-                        deadlineHeaderColor: deadlineHeaderColor,
-                        normalHeaderColor: normalHeaderColor,
-                      ),
-                    ],
-                  ],
+                        ],
+                      ],
+                    );
+                  },
                 ),
               ),
             ],
@@ -1314,12 +2009,12 @@ class _TodoPageState extends ConsumerState<TodoPage> {
 
   double _expandedSectionHeaderExtent(BuildContext context) {
     final double textScale = MediaQuery.textScalerOf(context).scale(12) / 12;
-    return 40 * textScale + 12;
+    return 40 * textScale + 14;
   }
 
   double _collapsedSectionHeaderExtent(BuildContext context) {
     final double textScale = MediaQuery.textScalerOf(context).scale(15) / 15;
-    return 46 * textScale + 10;
+    return 46 * textScale + 12;
   }
 
   double _todoGroupSectionGap({
@@ -1346,6 +2041,14 @@ class _TodoPageState extends ConsumerState<TodoPage> {
     final List<String> sectionOrder = ref
         .read(todoSectionOrderProvider.notifier)
         .normalizedOrder(todoGroups);
+    _sectionDragOrderContext = _SectionDragOrderContext(
+      orderedSectionIds: sectionOrder,
+      todoGroups: todoGroups,
+    );
+    _sectionHeaderMeasureKeys
+        .removeWhere((int index, GlobalKey _) => index >= sectionOrder.length);
+    _sectionFooterMeasureKeys
+        .removeWhere((int index, GlobalKey _) => index >= sectionOrder.length);
     final List<Widget> slivers = <Widget>[];
 
     for (int sectionIndex = 0; sectionIndex < sectionOrder.length; sectionIndex++) {
@@ -1378,12 +2081,14 @@ class _TodoPageState extends ConsumerState<TodoPage> {
                     todos: pendingDeadline,
                     reminderNotifier: reminderNotifier,
                     showCreatedDate: showTodoCreatedDate,
-                    keyPrefix: 'todo_deadline',
+                    keyPrefix: _todoDeadlineListKey,
                     reorderEnabled: false,
+                    dropEnabled: false,
                   ),
                 ),
               SliverToBoxAdapter(
-                child: SizedBox(
+                child: _buildSectionFooterGap(
+                  sectionIndex: sectionIndex,
                   height: _todoGroupSectionGap(
                     isExpanded: _showDeadlineTodos,
                     hasListItems: pendingDeadline.isNotEmpty,
@@ -1419,17 +2124,21 @@ class _TodoPageState extends ConsumerState<TodoPage> {
                 ),
               ),
               if (_showNormalTodos &&
-                  (pendingNormal.isNotEmpty || _normalHasDraftTodo()))
+                  (pendingNormal.isNotEmpty ||
+                      _normalHasDraftTodo() ||
+                      (_isTodoCrossDragActive && pendingNormal.isEmpty)))
                 SliverToBoxAdapter(
                   child: _buildTodoConnectedList(
                     todos: pendingNormal,
                     reminderNotifier: reminderNotifier,
                     showCreatedDate: showTodoCreatedDate,
-                    keyPrefix: 'todo_normal',
+                    keyPrefix: _todoNormalListKey,
+                    targetTodoGroupId: null,
                   ),
                 ),
               SliverToBoxAdapter(
-                child: SizedBox(
+                child: _buildSectionFooterGap(
+                  sectionIndex: sectionIndex,
                   height: _todoGroupSectionGap(
                     isExpanded: _showNormalTodos,
                     hasListItems:
@@ -1451,8 +2160,10 @@ class _TodoPageState extends ConsumerState<TodoPage> {
       final List<Reminder> groupTodos = _pendingTodosForGroup(pending, group.id);
       final bool isExpanded = _isTodoGroupExpanded(group.id);
       final Color groupHeaderColor = _todoGroupSectionHeaderColor(groupTodos);
-      final bool showGroupList =
-          isExpanded && (groupTodos.isNotEmpty || _groupHasDraftTodo(group.id));
+      final bool showGroupList = isExpanded &&
+          (groupTodos.isNotEmpty ||
+              _groupHasDraftTodo(group.id) ||
+              (_isTodoCrossDragActive && groupTodos.isEmpty));
 
       slivers.add(
         SliverMainAxisGroup(
@@ -1482,11 +2193,13 @@ class _TodoPageState extends ConsumerState<TodoPage> {
                   todos: groupTodos,
                   reminderNotifier: reminderNotifier,
                   showCreatedDate: showTodoCreatedDate,
-                  keyPrefix: 'todo_group_item',
+                  keyPrefix: _todoGroupListKey(group.id),
+                  targetTodoGroupId: group.id,
                 ),
               ),
             SliverToBoxAdapter(
-              child: SizedBox(
+              child: _buildSectionFooterGap(
+                sectionIndex: sectionIndex,
                 height: _todoGroupSectionGap(
                   isExpanded: isExpanded,
                   hasListItems: showGroupList,
@@ -1500,6 +2213,16 @@ class _TodoPageState extends ConsumerState<TodoPage> {
 
     slivers.add(const SliverToBoxAdapter(child: SizedBox(height: 20)));
     return slivers;
+  }
+
+  Widget _buildSectionFooterGap({
+    required int sectionIndex,
+    required double height,
+  }) {
+    return KeyedSubtree(
+      key: _sectionFooterMeasureKey(sectionIndex),
+      child: SizedBox(height: height),
+    );
   }
 
   Widget _pinnedSectionHeader({
@@ -1926,7 +2649,7 @@ class _TodoPinnedSectionHeaderDelegate extends SliverPersistentHeaderDelegate {
 
   @override
   bool shouldRebuild(covariant _TodoPinnedSectionHeaderDelegate oldDelegate) {
-    return true;
+    return oldDelegate.extent != extent || oldDelegate.child != child;
   }
 }
 

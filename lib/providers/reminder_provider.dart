@@ -457,6 +457,64 @@ class ReminderNotifier extends StateNotifier<List<Reminder>> {
     );
   }
 
+  Future<void> moveFlexibleTodoToInsertIndex({
+    required String reminderId,
+    required List<Reminder> targetList,
+    required int insertIndex,
+    String? targetTodoGroupId,
+  }) async {
+    final Reminder? moved = getReminderById(reminderId);
+    if (moved == null || !moved.isFlexible || moved.hasDeadline) {
+      return;
+    }
+
+    final List<Reminder> items = List<Reminder>.from(targetList);
+    final int existingIndex =
+        items.indexWhere((Reminder item) => item.id == reminderId);
+    if (existingIndex >= 0) {
+      items.removeAt(existingIndex);
+    }
+
+    int toIndex = insertIndex;
+    if (existingIndex >= 0 && existingIndex < insertIndex) {
+      toIndex = insertIndex - 1;
+    }
+    if (toIndex < 0) {
+      toIndex = 0;
+    }
+    if (toIndex > items.length) {
+      toIndex = items.length;
+    }
+
+    final bool sameMembership = moved.todoGroupId == targetTodoGroupId;
+    if (existingIndex >= 0 && toIndex == existingIndex && sameMembership) {
+      return;
+    }
+
+    items.insert(toIndex, moved);
+
+    final int newSortOrder;
+    if (items.length == 1) {
+      newSortOrder = moved.sortOrder;
+    } else if (toIndex == 0) {
+      newSortOrder = ListSortOrder.beforeFirst(items[1].sortOrder);
+    } else if (toIndex == items.length - 1) {
+      newSortOrder = ListSortOrder.afterLast(items[toIndex - 1].sortOrder);
+    } else {
+      newSortOrder = ListSortOrder.betweenOrdered(
+        items[toIndex - 1].sortOrder,
+        items[toIndex + 1].sortOrder,
+      );
+    }
+
+    await updateReminder(
+      reminderId: reminderId,
+      sortOrder: newSortOrder,
+      todoGroupId: targetTodoGroupId,
+      clearTodoGroupId: targetTodoGroupId == null,
+    );
+  }
+
   Future<void> syncFlexibleTodoToCalendar({
     required String reminderId,
     DateTime? scheduledTime,
