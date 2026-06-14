@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:murmur/core/theme/app_theme.dart';
@@ -138,6 +139,39 @@ class _TodoSubItemsPageState extends ConsumerState<TodoSubItemsPage> {
           title: title,
         );
     _draftSubItemIds.remove(item.id);
+  }
+
+  Future<void> _navigateAdjacentSubItemEdit({
+    required TodoSubItem current,
+    required List<TodoSubItem> listContext,
+    required int currentIndex,
+    required int delta,
+    required String title,
+  }) async {
+    final int adjacentIndex = currentIndex + delta;
+    if (adjacentIndex < 0 || adjacentIndex >= listContext.length) {
+      return;
+    }
+    final String targetId = listContext[adjacentIndex].id;
+    final String value = title.trim();
+
+    if (value.isEmpty && _draftSubItemIds.contains(current.id)) {
+      await _discardDraftSubItem(current.id);
+      if (!mounted) {
+        return;
+      }
+      _startSubItemEdit(targetId, selectAll: false);
+      return;
+    }
+
+    if (value.isNotEmpty && value != current.title) {
+      await _saveSubItemTitle(current, value);
+    }
+
+    if (!mounted) {
+      return;
+    }
+    _startSubItemEdit(targetId, selectAll: false);
   }
 
   Future<void> _createSubItemBelow({
@@ -306,6 +340,14 @@ class _TodoSubItemsPageState extends ConsumerState<TodoSubItemsPage> {
                     index: index,
                   ),
                   onDiscardDraft: () => _discardDraftSubItem(subItems[index].id),
+                  onNavigateAdjacent: (int delta, String title) =>
+                      _navigateAdjacentSubItemEdit(
+                        current: subItems[index],
+                        listContext: subItems,
+                        currentIndex: index,
+                        delta: delta,
+                        title: title,
+                      ),
                   onDelete: () => _deleteSubItem(subItems[index]),
                 ),
                 if (index < subItems.length - 1)
@@ -411,6 +453,7 @@ class _SubItemRow extends ConsumerStatefulWidget {
     required this.onTitleSave,
     required this.onCreateBelow,
     required this.onDiscardDraft,
+    this.onNavigateAdjacent,
     required this.onDelete,
   });
 
@@ -430,6 +473,7 @@ class _SubItemRow extends ConsumerStatefulWidget {
   final Future<void> Function(String title) onTitleSave;
   final VoidCallback onCreateBelow;
   final VoidCallback onDiscardDraft;
+  final Future<void> Function(int delta, String title)? onNavigateAdjacent;
   final VoidCallback onDelete;
 
   @override
@@ -543,6 +587,37 @@ class _SubItemRowState extends ConsumerState<_SubItemRow> {
       return;
     }
     widget.onEditStart();
+  }
+
+  Future<void> _onArrowKey(int delta) async {
+    if (!widget.editing ||
+        _isExitingEdit ||
+        widget.onNavigateAdjacent == null) {
+      return;
+    }
+    _suppressFocusExit = true;
+    try {
+      await widget.onNavigateAdjacent!(delta, _titleController.text);
+    } finally {
+      if (mounted) {
+        _suppressFocusExit = false;
+      }
+    }
+  }
+
+  KeyEventResult _onTitleKeyEvent(FocusNode node, KeyEvent event) {
+    if (!widget.editing || event is! KeyDownEvent) {
+      return KeyEventResult.ignored;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+      unawaited(_onArrowKey(-1));
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+      unawaited(_onArrowKey(1));
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
   }
 
   Future<void> _onTitleSubmitted(String _) async {
@@ -683,18 +758,22 @@ class _SubItemRowState extends ConsumerState<_SubItemRow> {
             child: Padding(
               padding: const EdgeInsets.only(top: 10, bottom: 10),
               child: widget.editing
-                  ? TextField(
-                      controller: _titleController,
+                  ? Focus(
                       focusNode: _titleFocusNode,
-                      style: editingTitleStyle,
-                      decoration: const InputDecoration(
-                        isDense: true,
-                        border: InputBorder.none,
-                        contentPadding: EdgeInsets.zero,
+                      onKeyEvent: _onTitleKeyEvent,
+                      child: TextField(
+                        controller: _titleController,
+                        focusNode: _titleFocusNode,
+                        style: editingTitleStyle,
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          border: InputBorder.none,
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                        maxLines: 1,
+                        textInputAction: TextInputAction.done,
+                        onSubmitted: _onTitleSubmitted,
                       ),
-                      maxLines: 1,
-                      textInputAction: TextInputAction.done,
-                      onSubmitted: _onTitleSubmitted,
                     )
                   : GestureDetector(
                       onTap: _startTitleEdit,

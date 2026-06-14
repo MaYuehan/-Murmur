@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:murmur/core/theme/app_theme.dart';
 import 'package:murmur/core/utils/date_time_utils.dart';
 import 'package:murmur/core/utils/reminder_time_rules.dart';
@@ -26,6 +27,7 @@ class TodoCard extends StatefulWidget {
     this.onTitleSave,
     this.onCreateBelow,
     this.onDiscardDraft,
+    this.onNavigateAdjacent,
     this.onCheckChanged,
     this.onSubItemsTap,
   });
@@ -45,6 +47,7 @@ class TodoCard extends StatefulWidget {
   final Future<void> Function(String title)? onTitleSave;
   final VoidCallback? onCreateBelow;
   final VoidCallback? onDiscardDraft;
+  final Future<void> Function(int delta, String title)? onNavigateAdjacent;
   final ValueChanged<bool?>? onCheckChanged;
   final VoidCallback? onSubItemsTap;
 
@@ -159,6 +162,37 @@ class _TodoCardState extends State<TodoCard> {
       return;
     }
     widget.onEditStart?.call();
+  }
+
+  Future<void> _onArrowKey(int delta) async {
+    if (!widget.editing ||
+        _isExitingEdit ||
+        widget.onNavigateAdjacent == null) {
+      return;
+    }
+    _suppressFocusExit = true;
+    try {
+      await widget.onNavigateAdjacent!(delta, _titleController.text);
+    } finally {
+      if (mounted) {
+        _suppressFocusExit = false;
+      }
+    }
+  }
+
+  KeyEventResult _onTitleKeyEvent(FocusNode node, KeyEvent event) {
+    if (!widget.editing || event is! KeyDownEvent) {
+      return KeyEventResult.ignored;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+      unawaited(_onArrowKey(-1));
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+      unawaited(_onArrowKey(1));
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
   }
 
   Future<void> _onTitleSubmitted(String _) async {
@@ -448,18 +482,22 @@ class _TodoCardState extends State<TodoCard> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
                   widget.editing
-                      ? TextField(
-                          controller: _titleController,
+                      ? Focus(
                           focusNode: _titleFocusNode,
-                          style: editingTitleStyle,
-                          decoration: const InputDecoration(
-                            isDense: true,
-                            border: InputBorder.none,
-                            contentPadding: EdgeInsets.zero,
+                          onKeyEvent: _onTitleKeyEvent,
+                          child: TextField(
+                            controller: _titleController,
+                            focusNode: _titleFocusNode,
+                            style: editingTitleStyle,
+                            decoration: const InputDecoration(
+                              isDense: true,
+                              border: InputBorder.none,
+                              contentPadding: EdgeInsets.zero,
+                            ),
+                            maxLines: 1,
+                            textInputAction: TextInputAction.done,
+                            onSubmitted: _onTitleSubmitted,
                           ),
-                          maxLines: 1,
-                          textInputAction: TextInputAction.done,
-                          onSubmitted: _onTitleSubmitted,
                         )
                       : GestureDetector(
                           onTap: _startTitleEdit,

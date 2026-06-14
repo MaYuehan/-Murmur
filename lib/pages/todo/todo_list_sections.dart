@@ -171,6 +171,15 @@ extension _TodoListSectionsExtension on _TodoPageState {
                   index: index,
                 ),
                 onDiscardDraft: () => _discardDraftTodo(todos[index].id),
+                onNavigateAdjacent: !deleteOnly
+                    ? (int delta, String title) => _navigateAdjacentTodoEdit(
+                          current: todos[index],
+                          listContext: todos,
+                          currentIndex: index,
+                          delta: delta,
+                          title: title,
+                        )
+                    : null,
                 onCheckChanged: (bool? checked) =>
                     _onTodoCheckChanged(todos[index], checked),
                 onSubItemsTap: todos[index].hasSubItems

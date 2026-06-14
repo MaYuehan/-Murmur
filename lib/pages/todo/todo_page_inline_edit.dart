@@ -85,6 +85,40 @@ extension _TodoPageInlineEditExtension on _TodoPageState {
     });
   }
 
+  Future<void> _navigateAdjacentTodoEdit({
+    required Reminder current,
+    required List<Reminder> listContext,
+    required int currentIndex,
+    required int delta,
+    required String title,
+  }) async {
+    final int adjacentIndex = currentIndex + delta;
+    if (adjacentIndex < 0 || adjacentIndex >= listContext.length) {
+      return;
+    }
+    final String targetId = listContext[adjacentIndex].id;
+    final String value = title.trim();
+
+    if (value.isEmpty && _draftTodoIds.contains(current.id)) {
+      await _discardDraftTodo(current.id);
+      if (!mounted) {
+        return;
+      }
+      _startTodoTitleEdit(targetId, selectAll: false);
+      return;
+    }
+
+    if (value.isNotEmpty && value != current.title) {
+      await _commitTodoTitle(current, value);
+      _draftTodoIds.remove(current.id);
+    }
+
+    if (!mounted) {
+      return;
+    }
+    _startTodoTitleEdit(targetId, selectAll: false);
+  }
+
   Future<void> _createTodoBelow({
     required Reminder afterReminder,
     required List<Reminder> listContext,
