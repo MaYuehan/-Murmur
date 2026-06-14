@@ -24,22 +24,71 @@ class AppCalendarStyles {
   }
 
   static const double monthDayHighlightSize = 40;
+  static const double monthMarkerSize = 4;
+  static const double monthMarkerGap = 2;
 
   static Widget monthDayCell({
     required int dayNumber,
     required Decoration decoration,
     required TextStyle textStyle,
+    bool hasMarker = false,
+    Color? markerColor,
   }) {
-    // Use [Container] not [AnimatedContainer]: decoration tween cannot mix
-    // circle and borderRadius (e.g. after hot reload or style changes).
     return Center(
       child: Container(
         width: monthDayHighlightSize,
         height: monthDayHighlightSize,
         alignment: Alignment.center,
         decoration: decoration,
-        child: Text('$dayNumber', style: textStyle),
+        child: _monthDayCellContent(
+          dayNumber: dayNumber,
+          textStyle: textStyle,
+          hasMarker: hasMarker,
+          markerColor: markerColor,
+        ),
       ),
+    );
+  }
+
+  static Widget monthDayCellPlain({
+    required int dayNumber,
+    required TextStyle textStyle,
+    bool hasMarker = false,
+    Color? markerColor,
+  }) {
+    return Center(
+      child: _monthDayCellContent(
+        dayNumber: dayNumber,
+        textStyle: textStyle,
+        hasMarker: hasMarker,
+        markerColor: markerColor,
+      ),
+    );
+  }
+
+  static Widget _monthDayCellContent({
+    required int dayNumber,
+    required TextStyle textStyle,
+    required bool hasMarker,
+    Color? markerColor,
+  }) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Text('$dayNumber', style: textStyle),
+        if (hasMarker) ...<Widget>[
+          const SizedBox(height: monthMarkerGap),
+          Container(
+            width: monthMarkerSize,
+            height: monthMarkerSize,
+            decoration: BoxDecoration(
+              color: markerColor ?? AppTheme.primaryColor,
+              shape: BoxShape.circle,
+            ),
+          ),
+        ],
+      ],
     );
   }
 
@@ -88,16 +137,12 @@ class AppCalendarStyles {
         fontWeight: FontWeight.w700,
         color: AppTheme.textPrimaryColor,
       ),
-      markerSize: 4,
+      markerSize: 0,
       markerMargin: EdgeInsets.zero,
-      markersAnchor: 0.65,
-      tablePadding: const EdgeInsets.only(bottom: 4),
-      canMarkersOverflow: true,
-      markersMaxCount: 1,
-      markerDecoration: BoxDecoration(
-        color: scheme.primary,
-        shape: BoxShape.circle,
-      ),
+      markersAnchor: 0.5,
+      tablePadding: EdgeInsets.zero,
+      canMarkersOverflow: false,
+      markersMaxCount: 0,
       selectedDecoration: monthDayHighlightDecoration(AppTheme.primaryColor),
       todayDecoration: monthDayHighlightDecoration(
         todayLightHighlightColor(AppTheme.primaryColor),
@@ -105,7 +150,10 @@ class AppCalendarStyles {
     );
   }
 
-  static CalendarBuilders calendarBuilders(BuildContext context) {
+  static CalendarBuilders<void> calendarBuilders(
+    BuildContext context, {
+    int Function(DateTime day)? eventCountForDay,
+  }) {
     final ColorScheme scheme = Theme.of(context).colorScheme;
     final TextStyle baseDayStyle = Theme.of(context).textTheme.titleMedium?.copyWith(
           fontSize: 16,
@@ -118,7 +166,23 @@ class AppCalendarStyles {
           color: AppTheme.textPrimaryColor,
         );
 
+    bool hasEvents(DateTime day) => (eventCountForDay?.call(day) ?? 0) > 0;
+
     return CalendarBuilders<void>(
+      markerBuilder: (BuildContext context, DateTime day, List<void> events) {
+        if (events.isEmpty) {
+          return null;
+        }
+        return const SizedBox.shrink();
+      },
+      defaultBuilder: (BuildContext context, DateTime day, DateTime focusedDay) {
+        return monthDayCellPlain(
+          dayNumber: day.day,
+          textStyle: baseDayStyle,
+          hasMarker: hasEvents(day),
+          markerColor: scheme.primary,
+        );
+      },
       dowBuilder: (BuildContext context, DateTime day) {
         return Center(
           child: Text(
@@ -137,6 +201,8 @@ class AppCalendarStyles {
             todayLightHighlightColor(AppTheme.primaryColor),
           ),
           textStyle: baseDayStyle.copyWith(fontWeight: FontWeight.w700),
+          hasMarker: hasEvents(day),
+          markerColor: scheme.primary,
         );
       },
       selectedBuilder: (BuildContext context, DateTime day, DateTime focusedDay) {
@@ -147,6 +213,8 @@ class AppCalendarStyles {
             fontWeight: FontWeight.w600,
             color: scheme.onPrimary,
           ),
+          hasMarker: hasEvents(day),
+          markerColor: scheme.onPrimary,
         );
       },
     );
@@ -161,6 +229,7 @@ class AppCalendarStyles {
     required void Function(DateTime selectedDay, DateTime focusedDay) onDaySelected,
     void Function(DateTime focusedDay)? onPageChanged,
     List<void> Function(DateTime day)? eventLoader,
+    int Function(DateTime day)? eventCountForDay,
   }) {
     final bool weekStartsOnMonday = AppSettingsStorage.weekStartsOnMonday;
 
@@ -180,7 +249,13 @@ class AppCalendarStyles {
       daysOfWeekHeight: CalendarLayoutUtils.daysOfWeekHeight,
       headerStyle: headerStyle,
       calendarStyle: calendarStyle(context),
-      calendarBuilders: calendarBuilders(context),
+      calendarBuilders: calendarBuilders(
+        context,
+        eventCountForDay: eventCountForDay ??
+            (eventLoader == null
+                ? null
+                : (DateTime day) => eventLoader(day).length),
+      ),
     );
   }
 }

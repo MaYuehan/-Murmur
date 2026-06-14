@@ -3,7 +3,7 @@ class CalendarLayoutUtils {
   CalendarLayoutUtils._();
 
   /// Per-week row height used in month calendar UIs.
-  static const double monthRowHeight = 52;
+  static const double monthRowHeight = 46;
 
   static const double daysOfWeekHeight = 16;
 

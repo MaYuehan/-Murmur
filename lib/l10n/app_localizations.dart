@@ -117,11 +117,29 @@ class AppLocalizations {
   // Todo
   String get todoPageTitle => _t('待办', 'Tasks');
   String get todoSectionTitle => _t('待办', 'Tasks');
+  String get todoAllPending => _t('全部待办', 'All tasks');
+  String get todoAllCompleted => _t('全部已完成', 'All completed');
   String get todoDeadlineSection => _t('截止待办', 'Deadline Tasks');
   String get todoNormalSection => _t('普通待办', 'Tasks');
+  String get todoGroupSection => _t('待办组', 'Task groups');
+  String get todoAddGroup => _t('添加待办组', 'Add task group');
+  String get todoGroupNameHint => _t('待办组名称', 'Group name');
+  String get todoFieldGroup => _t('待办组', 'Task group');
+  String get todoGroupNone => _t('无', 'None');
+  String get todoGroupPickerTitle => _t('选择待办组', 'Select task group');
+  String get todoDeleteGroupTitle => _t('删除待办组', 'Delete task group');
+  String todoDeleteGroupMessage(String name) =>
+      _t('确定删除「$name」吗？', 'Delete “$name”?');
+  String todoDeleteGroupMessageWithTodos(String name, int count) => _t(
+        '确定删除「$name」吗？组内有 $count 项待办，是否一并删除？',
+        'Delete “$name”? It contains $count task(s). Delete them too?',
+      );
+  String get todoDeleteGroupKeepTodos => _t('保留待办', 'Keep tasks');
+  String get todoDeleteGroupDeleteTodos => _t('一并删除', 'Delete all');
   String get todoEmptyTitle => _t('还没有待办事项', 'No tasks yet');
   String get todoEmptySubtitle =>
       _t('点击右上角「新建」添加', 'Tap “New” at top right to add');
+  String get todoCompletedEmptyTitle => _t('还没有已完成事项', 'No completed tasks yet');
   String get todoCompletedSection => _t('已完成', 'Completed');
   String get todoClearCompleted => _t('清除已完成', 'Clear completed');
   String get todoClearCompletedConfirmTitle =>

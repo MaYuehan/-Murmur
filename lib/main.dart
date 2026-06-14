@@ -7,6 +7,7 @@ import 'package:murmur/core/utils/notification_service.dart';
 import 'package:murmur/core/utils/reminder_storage.dart';
 import 'package:murmur/l10n/app_localizations.dart';
 import 'package:murmur/models/reminder.dart';
+import 'package:murmur/models/todo_group.dart';
 import 'package:murmur/pages/calendar/calendar_page.dart';
 import 'package:murmur/pages/profile/profile_page.dart';
 import 'package:murmur/pages/todo/todo_page.dart';
@@ -14,6 +15,7 @@ import 'package:murmur/pages/voice/voice_page.dart';
 import 'package:murmur/providers/locale_provider.dart';
 import 'package:murmur/providers/notification_navigation_provider.dart';
 import 'package:murmur/providers/reminder_provider.dart';
+import 'package:murmur/providers/todo_group_provider.dart';
 import 'package:murmur/services/voice_remind_playback.dart';
 
 final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
@@ -27,9 +29,11 @@ Future<void> main() async {
   AppLocalizationsBinding.instance = AppLocalizations(AppSettingsStorage.appLocale);
 
   final List<Reminder> initialReminders = ReminderStorage.loadReminders();
+  final List<TodoGroup> initialTodoGroups = ReminderStorage.loadTodoGroups();
   _bootstrapContainer = ProviderContainer(
     overrides: <Override>[
       initialReminderListProvider.overrideWithValue(initialReminders),
+      initialTodoGroupListProvider.overrideWithValue(initialTodoGroups),
     ],
   );
 

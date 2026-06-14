@@ -213,37 +213,59 @@ class _TodoSubItemsPageState extends ConsumerState<TodoSubItemsPage> {
               title: l10n.todoSubItemsEmptyTitle,
               subtitle: l10n.todoSubItemsEmptySubtitle,
             )
-          : ListView.builder(
+          : ListView(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-              itemCount: subItems.length,
-              itemBuilder: (BuildContext context, int index) {
-                final TodoSubItem item = subItems[index];
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: _SubItemRow(
-                    key: ValueKey<String>(item.id),
-                    item: item,
-                    parentId: widget.todoId,
-                    selectionMode: _selectionMode,
-                    selected: _selectedIds.contains(item.id),
-                    editing: _editingSubItemId == item.id,
-                    requestFocus: _pendingFocusSubItemId == item.id,
-                    onFocusHandled: () {
-                      if (_pendingFocusSubItemId == item.id) {
-                        setState(() => _pendingFocusSubItemId = null);
-                      }
-                    },
-                    onSelectionToggle: () => _toggleSelected(item.id),
-                    onEditStart: () => setState(() => _editingSubItemId = item.id),
-                    onEditEnd: () {
-                      if (_editingSubItemId == item.id) {
-                        setState(() => _editingSubItemId = null);
-                      }
-                    },
-                    onDelete: () => _deleteSubItem(item),
+              children: <Widget>[
+                Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(AppTheme.groupedRadius),
+                    boxShadow: <BoxShadow>[
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.05),
+                        blurRadius: 10,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
                   ),
-                );
-              },
+                  child: AppGroupedSection(
+                    children: <Widget>[
+                      for (int index = 0; index < subItems.length; index++) ...<Widget>[
+                        _SubItemRow(
+                          key: ValueKey<String>(subItems[index].id),
+                          item: subItems[index],
+                          parentId: widget.todoId,
+                          grouped: true,
+                          selectionMode: _selectionMode,
+                          selected: _selectedIds.contains(subItems[index].id),
+                          editing: _editingSubItemId == subItems[index].id,
+                          requestFocus: _pendingFocusSubItemId == subItems[index].id,
+                          onFocusHandled: () {
+                            if (_pendingFocusSubItemId == subItems[index].id) {
+                              setState(() => _pendingFocusSubItemId = null);
+                            }
+                          },
+                          onSelectionToggle: () => _toggleSelected(subItems[index].id),
+                          onEditStart: () =>
+                              setState(() => _editingSubItemId = subItems[index].id),
+                          onEditEnd: () {
+                            if (_editingSubItemId == subItems[index].id) {
+                              setState(() => _editingSubItemId = null);
+                            }
+                          },
+                          onDelete: () => _deleteSubItem(subItems[index]),
+                        ),
+                        if (index < subItems.length - 1)
+                          const Divider(
+                            height: 1,
+                            thickness: 0.5,
+                            indent: 16,
+                            color: AppTheme.separatorColor,
+                          ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
             ),
     );
   }
@@ -254,6 +276,7 @@ class _SubItemRow extends ConsumerStatefulWidget {
     super.key,
     required this.item,
     required this.parentId,
+    this.grouped = false,
     required this.selectionMode,
     required this.selected,
     required this.editing,
@@ -267,6 +290,7 @@ class _SubItemRow extends ConsumerStatefulWidget {
 
   final TodoSubItem item;
   final String parentId;
+  final bool grouped;
   final bool selectionMode;
   final bool selected;
   final bool editing;
@@ -419,66 +443,68 @@ class _SubItemRowState extends ConsumerState<_SubItemRow> {
     final TodoSubItem item = widget.item;
     final TextStyle? titleStyle = _titleTextStyle(context);
 
-    final Widget row = Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(AppTheme.groupedRadius),
-        boxShadow: <BoxShadow>[
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: AppGroupedSection(
+    final Widget content = Padding(
+      padding: const EdgeInsets.fromLTRB(6, 4, 10, 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: <Widget>[
-          Padding(
-            padding: const EdgeInsets.fromLTRB(6, 4, 10, 4),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: <Widget>[
-                if (widget.selectionMode)
-                  Checkbox(
-                    value: widget.selected,
-                    onChanged: (_) => widget.onSelectionToggle(),
-                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    visualDensity: VisualDensity.compact,
-                  )
-                else
-                  _buildCompleteCheckbox(item),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 10, bottom: 10),
-                    child: widget.editing
-                        ? TextField(
-                            controller: _titleController,
-                            focusNode: _titleFocusNode,
-                            style: titleStyle,
-                            decoration: const InputDecoration(
-                              isDense: true,
-                              border: InputBorder.none,
-                              contentPadding: EdgeInsets.zero,
-                            ),
-                            maxLines: null,
-                            textInputAction: TextInputAction.done,
-                            onSubmitted: (_) => _commitTitleEdit(),
-                          )
-                        : GestureDetector(
-                            onTap: _startTitleEdit,
-                            behavior: HitTestBehavior.opaque,
-                            child: Text(
-                              item.title,
-                              style: titleStyle,
-                            ),
-                          ),
-                  ),
-                ),
-              ],
+          if (widget.selectionMode)
+            Checkbox(
+              value: widget.selected,
+              onChanged: (_) => widget.onSelectionToggle(),
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              visualDensity: VisualDensity.compact,
+            )
+          else
+            _buildCompleteCheckbox(item),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.only(top: 10, bottom: 10),
+              child: widget.editing
+                  ? TextField(
+                      controller: _titleController,
+                      focusNode: _titleFocusNode,
+                      style: titleStyle,
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                      maxLines: null,
+                      textInputAction: TextInputAction.done,
+                      onSubmitted: (_) => _commitTitleEdit(),
+                    )
+                  : GestureDetector(
+                      onTap: _startTitleEdit,
+                      behavior: HitTestBehavior.opaque,
+                      child: Text(
+                        item.title,
+                        style: titleStyle,
+                      ),
+                    ),
             ),
           ),
         ],
       ),
     );
+
+    final Widget row = widget.grouped
+        ? content
+        : Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(AppTheme.groupedRadius),
+              boxShadow: <BoxShadow>[
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: AppGroupedSection(
+              children: <Widget>[content],
+            ),
+          );
 
     if (widget.selectionMode) {
       return row;

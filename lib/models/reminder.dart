@@ -25,7 +25,9 @@ class Reminder {
     this.calendarLinkedId,
     this.isTodoDeadline = false,
     this.linkedTodoId,
+    this.todoGroupId,
     required this.isCompleted,
+    this.completedAt,
     required this.createdAt,
     List<TodoSubItem>? subItems,
   }) : _subItems = subItems;
@@ -53,7 +55,9 @@ class Reminder {
   final String? calendarLinkedId;
   final bool isTodoDeadline;
   final String? linkedTodoId;
+  final String? todoGroupId;
   final bool isCompleted;
+  final DateTime? completedAt;
   final DateTime createdAt;
   final List<TodoSubItem>? _subItems;
 
@@ -100,7 +104,11 @@ class Reminder {
     bool? isTodoDeadline,
     String? linkedTodoId,
     bool clearLinkedTodoId = false,
+    String? todoGroupId,
+    bool clearTodoGroupId = false,
     bool? isCompleted,
+    DateTime? completedAt,
+    bool clearCompletedAt = false,
     DateTime? createdAt,
     List<TodoSubItem>? subItems,
   }) {
@@ -130,7 +138,9 @@ class Reminder {
           clearCalendarLinkedId ? null : (calendarLinkedId ?? this.calendarLinkedId),
       isTodoDeadline: isTodoDeadline ?? this.isTodoDeadline,
       linkedTodoId: clearLinkedTodoId ? null : (linkedTodoId ?? this.linkedTodoId),
+      todoGroupId: clearTodoGroupId ? null : (todoGroupId ?? this.todoGroupId),
       isCompleted: isCompleted ?? this.isCompleted,
+      completedAt: clearCompletedAt ? null : (completedAt ?? this.completedAt),
       createdAt: createdAt ?? this.createdAt,
       subItems: subItems ?? _subItems,
     );
@@ -161,7 +171,9 @@ class Reminder {
       'calendarLinkedId': calendarLinkedId,
       'isTodoDeadline': isTodoDeadline,
       'linkedTodoId': linkedTodoId,
+      'todoGroupId': todoGroupId,
       'isCompleted': isCompleted,
+      'completedAt': completedAt?.toIso8601String(),
       'createdAt': createdAt.toIso8601String(),
       'subItems': subItems.map((TodoSubItem item) => item.toMap()).toList(),
     };
@@ -184,6 +196,7 @@ class Reminder {
             const <int>[];
     final bool? voiceRemindEnabledRaw = map['voiceRemindEnabled'] as bool?;
     final bool? isTodoDeadlineRaw = map['isTodoDeadline'] as bool?;
+    final String? completedAtRaw = map['completedAt'] as String?;
     final bool isCustomVoice = isCustomVoiceRaw ?? false;
     final String? remindVoiceIdRaw = map['remindVoiceId'] as String?;
 
@@ -216,7 +229,9 @@ class Reminder {
       calendarLinkedId: map['calendarLinkedId'] as String?,
       isTodoDeadline: isTodoDeadlineRaw ?? false,
       linkedTodoId: map['linkedTodoId'] as String?,
+      todoGroupId: map['todoGroupId'] as String?,
       isCompleted: map['isCompleted'] as bool,
+      completedAt: completedAtRaw == null ? null : DateTime.parse(completedAtRaw),
       createdAt: DateTime.parse(map['createdAt'] as String),
       subItems: (map['subItems'] as List<dynamic>?)
               ?.whereType<Map<dynamic, dynamic>>()

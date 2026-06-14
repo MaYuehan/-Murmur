@@ -675,7 +675,10 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
               return List<void>.filled(count, null, growable: false);
             },
             calendarStyle: AppCalendarStyles.calendarStyle(context),
-            calendarBuilders: AppCalendarStyles.calendarBuilders(context),
+            calendarBuilders: AppCalendarStyles.calendarBuilders(
+              context,
+              eventCountForDay: notifier.fixedReminderCountForDay,
+            ),
                   ),
                 ),
                 ),

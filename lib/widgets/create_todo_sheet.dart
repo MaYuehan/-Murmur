@@ -6,7 +6,9 @@ import 'package:murmur/core/utils/date_time_utils.dart';
 import 'package:murmur/core/utils/reminder_time_rules.dart';
 import 'package:murmur/l10n/app_localizations.dart';
 import 'package:murmur/models/reminder.dart';
+import 'package:murmur/models/todo_group.dart';
 import 'package:murmur/providers/reminder_provider.dart';
+import 'package:murmur/providers/todo_group_provider.dart';
 import 'package:murmur/services/voice_service.dart';
 import 'package:murmur/widgets/app_ui.dart';
 import 'package:murmur/widgets/inline_date_picker.dart';
@@ -18,6 +20,8 @@ import 'package:murmur/widgets/voice_record_panel.dart';
 enum _VoiceRemindMode { textAndPreset, record }
 
 enum _ExpandedField { none, deadlineDate, deadlineTime, customRemindTime }
+
+const String _noTodoGroupPickerValue = '';
 
 class CreateTodoSheet extends ConsumerStatefulWidget {
   const CreateTodoSheet({super.key, this.editingReminder});
@@ -70,6 +74,7 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
   String _voiceSelection = VoiceService.defaultVoiceId;
   _VoiceRemindMode _voiceRemindMode = _VoiceRemindMode.textAndPreset;
   String? _recordingPath;
+  String? _selectedTodoGroupId;
   _ExpandedField _expandedField = _ExpandedField.none;
 
   bool get _isEditing => widget.editingReminder != null;
@@ -88,6 +93,7 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
 
     _titleController.text = existing.title;
     _notesController.text = existing.notes ?? '';
+    _selectedTodoGroupId = existing.todoGroupId;
     _remindTextController.text = existing.remindText ?? '';
     _hasDeadline = existing.hasDeadline;
     if (existing.deadlineAt != null) {
@@ -308,6 +314,51 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
       } else if (_expandedField == _ExpandedField.customRemindTime) {
         _expandedField = _ExpandedField.none;
       }
+    });
+    _restoreScrollOffset(scrollOffset);
+  }
+
+  String _todoGroupPickerValue(List<TodoGroup> groups) {
+    if (_selectedTodoGroupId == null) {
+      return _noTodoGroupPickerValue;
+    }
+    final bool exists = groups.any((TodoGroup group) => group.id == _selectedTodoGroupId);
+    return exists ? _selectedTodoGroupId! : _noTodoGroupPickerValue;
+  }
+
+  String _todoGroupDisplayLabel(AppLocalizations l10n, List<TodoGroup> groups) {
+    if (_selectedTodoGroupId == null) {
+      return l10n.todoGroupNone;
+    }
+    for (final TodoGroup group in groups) {
+      if (group.id == _selectedTodoGroupId) {
+        return group.name;
+      }
+    }
+    return l10n.todoGroupNone;
+  }
+
+  Future<void> _pickTodoGroup(List<TodoGroup> groups) async {
+    final double scrollOffset = _currentScrollOffset;
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    final List<AppPickerOption<String>> options = <AppPickerOption<String>>[
+      AppPickerOption<String>(value: _noTodoGroupPickerValue, label: l10n.todoGroupNone),
+      ...groups.map(
+        (TodoGroup group) => AppPickerOption<String>(value: group.id, label: group.name),
+      ),
+    ];
+    final String? picked = await showAppOptionPicker<String>(
+      context: context,
+      title: l10n.todoGroupPickerTitle,
+      options: options,
+      current: _todoGroupPickerValue(groups),
+    );
+    if (picked == null || !mounted) {
+      return;
+    }
+    setState(() {
+      _selectedTodoGroupId =
+          picked == _noTodoGroupPickerValue ? null : picked;
     });
     _restoreScrollOffset(scrollOffset);
   }
@@ -575,6 +626,8 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
             voicePath: voicePath,
             isCustomVoice: isCustomVoice,
             notes: notes.isEmpty ? null : notes,
+            todoGroupId: _selectedTodoGroupId,
+            clearTodoGroupId: _selectedTodoGroupId == null,
           );
     } else {
       await ref.read(reminderListProvider.notifier).addFlexibleTodo(
@@ -593,6 +646,7 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
             voicePath: voicePath,
             isCustomVoice: isCustomVoice,
             notes: notes.isEmpty ? null : notes,
+            todoGroupId: _selectedTodoGroupId,
           );
     }
 
@@ -605,6 +659,7 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
   @override
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context);
+    final List<TodoGroup> todoGroups = ref.watch(todoGroupListProvider);
     final DateTime? remindPreview = _computedRemindAt;
     final ColorScheme scheme = Theme.of(context).colorScheme;
 
@@ -679,6 +734,25 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
                       ),
                     ],
                   ),
+                  if (todoGroups.isNotEmpty) ...<Widget>[
+                    const SizedBox(height: 12),
+                    AppSectionHeader(
+                      title: l10n.todoFieldGroup,
+                      style: AppSectionHeaderStyle.caption,
+                    ),
+                    AppDetailSection(
+                      children: <Widget>[
+                        AppDetailTile(
+                          icon: Icons.folder_outlined,
+                          iconColor: AppTheme.secondaryLabelColor,
+                          title: l10n.todoFieldGroup,
+                          value: _todoGroupDisplayLabel(l10n, todoGroups),
+                          onTap: () => _pickTodoGroup(todoGroups),
+                          showDivider: false,
+                        ),
+                      ],
+                    ),
+                  ],
                   const SizedBox(height: 12),
                   AppSectionHeader(
                     title: l10n.todoSectionDeadline,

@@ -79,6 +79,7 @@ class ReminderNotifier extends StateNotifier<List<Reminder>> {
     String? calendarLinkedId,
     bool isTodoDeadline = false,
     String? linkedTodoId,
+    String? todoGroupId,
     bool isCompleted = false,
     String? id,
   }) async {
@@ -108,6 +109,7 @@ class ReminderNotifier extends StateNotifier<List<Reminder>> {
       calendarLinkedId: calendarLinkedId,
       isTodoDeadline: isTodoDeadline,
       linkedTodoId: linkedTodoId,
+      todoGroupId: todoGroupId,
       isCompleted: isCompleted,
       createdAt: now,
     );
@@ -134,6 +136,7 @@ class ReminderNotifier extends StateNotifier<List<Reminder>> {
     String? voicePath,
     bool isCustomVoice = false,
     String? notes,
+    String? todoGroupId,
   }) async {
     final DateTime now = DateTime.now();
     final String todoId = now.microsecondsSinceEpoch.toString();
@@ -184,6 +187,7 @@ class ReminderNotifier extends StateNotifier<List<Reminder>> {
       voicePath: voicePath,
       isCustomVoice: isCustomVoice,
       notes: normalizedNotes,
+      todoGroupId: todoGroupId,
     );
   }
 
@@ -204,6 +208,8 @@ class ReminderNotifier extends StateNotifier<List<Reminder>> {
     String? voicePath,
     bool isCustomVoice = false,
     String? notes,
+    String? todoGroupId,
+    bool clearTodoGroupId = false,
   }) async {
     final Reminder? existing = getReminderById(reminderId);
     if (existing == null || !existing.isFlexible) {
@@ -300,6 +306,8 @@ class ReminderNotifier extends StateNotifier<List<Reminder>> {
       isCustomVoice: isCustomVoice,
       notes: normalizedNotes,
       clearNotes: normalizedNotes == null,
+      todoGroupId: todoGroupId,
+      clearTodoGroupId: clearTodoGroupId,
       syncLinkedCalendar: calendarLinkedId != null,
     );
   }
@@ -472,6 +480,8 @@ class ReminderNotifier extends StateNotifier<List<Reminder>> {
       }
       updatedReminder = reminder.copyWith(
         isCompleted: isCompleted,
+        completedAt: isCompleted ? DateTime.now() : null,
+        clearCompletedAt: !isCompleted,
         subItems: subItems,
       );
       return updatedReminder!;
@@ -536,6 +546,8 @@ class ReminderNotifier extends StateNotifier<List<Reminder>> {
     bool? isCompleted,
     bool syncLinkedTodo = true,
     bool syncLinkedCalendar = false,
+    String? todoGroupId,
+    bool clearTodoGroupId = false,
   }) async {
     final Reminder? existing = getReminderById(reminderId);
     if (existing != null) {
@@ -581,6 +593,8 @@ class ReminderNotifier extends StateNotifier<List<Reminder>> {
         linkedTodoId: linkedTodoId,
         clearLinkedTodoId: clearLinkedTodoId,
         isCompleted: isCompleted,
+        todoGroupId: todoGroupId,
+        clearTodoGroupId: clearTodoGroupId,
       );
       return updated!;
     }).toList();
@@ -791,6 +805,30 @@ class ReminderNotifier extends StateNotifier<List<Reminder>> {
       return !(reminder.isFlexible && reminder.isCompleted);
     }).toList();
     await ReminderStorage.saveReminders(state);
+  }
+
+  Future<void> clearTodoGroupMembership(String groupId) async {
+    state = state
+        .map((Reminder reminder) {
+          if (reminder.todoGroupId == groupId) {
+            return reminder.copyWith(clearTodoGroupId: true);
+          }
+          return reminder;
+        })
+        .toList();
+    await ReminderStorage.saveReminders(state);
+  }
+
+  Future<void> deleteFlexibleTodosInGroup(String groupId) async {
+    final List<Reminder> groupTodos = state
+        .where(
+          (Reminder reminder) =>
+              reminder.isFlexible && reminder.todoGroupId == groupId,
+        )
+        .toList();
+    for (final Reminder todo in groupTodos) {
+      await deleteFlexibleTodo(reminderId: todo.id);
+    }
   }
 
   Reminder? getReminderById(String id) {
