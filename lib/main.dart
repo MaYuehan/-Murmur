@@ -9,14 +9,15 @@ import 'package:murmur/l10n/app_localizations.dart';
 import 'package:murmur/models/reminder.dart';
 import 'package:murmur/models/todo_group.dart';
 import 'package:murmur/pages/calendar/calendar_page.dart';
+import 'package:murmur/pages/family/family_page.dart';
 import 'package:murmur/pages/profile/profile_page.dart';
 import 'package:murmur/pages/todo/todo_page.dart';
-import 'package:murmur/pages/voice/voice_page.dart';
 import 'package:murmur/providers/locale_provider.dart';
 import 'package:murmur/providers/notification_navigation_provider.dart';
 import 'package:murmur/providers/reminder_provider.dart';
 import 'package:murmur/providers/todo_group_provider.dart';
 import 'package:murmur/services/voice_remind_playback.dart';
+import 'package:murmur/services/voice_service.dart';
 
 final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
 late final ProviderContainer _bootstrapContainer;
@@ -60,6 +61,14 @@ Future<void> main() async {
   );
   await NotificationService.requestPermissions();
   await NotificationService.rescheduleFixedReminders(initialReminders);
+
+  await VoiceService.bootstrap();
+  final Set<String> protectedRecordingPaths = initialReminders
+      .map((Reminder r) => r.voicePath)
+      .whereType<String>()
+      .where((String path) => path.isNotEmpty)
+      .toSet();
+  await VoiceService.purgeExpiredRecordings(protectedRecordingPaths);
 
   runApp(
     UncontrolledProviderScope(
@@ -107,7 +116,7 @@ class _AppShellState extends State<AppShell> {
   static const List<Widget> _pages = <Widget>[
     CalendarPage(),
     TodoPage(),
-    VoicePage(),
+    FamilyPage(),
     ProfilePage(),
   ];
 
@@ -169,9 +178,9 @@ class _AppShellState extends State<AppShell> {
                 label: l10n.navTodo,
               ),
               NavigationDestination(
-                icon: Icon(Icons.mic_none_outlined),
-                selectedIcon: Icon(Icons.mic),
-                label: l10n.navVoice,
+                icon: Icon(Icons.favorite_outline),
+                selectedIcon: Icon(Icons.favorite),
+                label: l10n.navFamily,
               ),
               NavigationDestination(
                 icon: Icon(Icons.person_outline),

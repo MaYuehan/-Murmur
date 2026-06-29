@@ -12,6 +12,7 @@ class AppSettingsStorage {
   static const String _showDeadlineTodosKey = 'show_deadline_todos';
   static const String _showNormalTodosKey = 'show_normal_todos';
   static const String _expandedTodoGroupsKey = 'expanded_todo_groups';
+  static const String _defaultVoiceIdKey = 'default_voice_id';
 
   static Future<void> init() async {
     await Hive.openBox<dynamic>(_boxName);
@@ -103,5 +104,13 @@ class AppSettingsStorage {
 
   static Future<void> setExpandedTodoGroups(Map<String, bool> value) async {
     await _box.put(_expandedTodoGroupsKey, value);
+  }
+
+  static String get defaultVoiceId {
+    return _box.get(_defaultVoiceIdKey) as String? ?? 'default';
+  }
+
+  static Future<void> setDefaultVoiceId(String voiceId) async {
+    await _box.put(_defaultVoiceIdKey, voiceId);
   }
 }

@@ -16,6 +16,7 @@ import 'package:murmur/widgets/inline_datetime_picker.dart';
 import 'package:murmur/widgets/inline_repeat_days_picker.dart';
 import 'package:murmur/widgets/inline_time_picker.dart';
 import 'package:murmur/widgets/voice_record_panel.dart';
+import 'package:murmur/widgets/voice_text_preview_panel.dart';
 
 enum _VoiceRemindMode { textAndPreset, record }
 
@@ -87,6 +88,7 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
   String _voiceSelection = VoiceService.defaultVoiceId;
   _VoiceRemindMode _voiceRemindMode = _VoiceRemindMode.textAndPreset;
   String? _recordingPath;
+  bool _isRecording = false;
   String? _selectedTodoGroupId;
   _ExpandedField _expandedField = _ExpandedField.none;
 
@@ -1007,6 +1009,10 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
                               onTap: _pickPresetVoice,
                               showDivider: false,
                             ),
+                            VoiceTextPreviewPanel(
+                              text: _remindTextController.text,
+                              voiceId: _voiceSelection,
+                            ),
                           ] else
                             Padding(
                               padding: const EdgeInsets.fromLTRB(14, 8, 14, 14),
@@ -1015,11 +1021,38 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
                                 onRecordingPathChanged: (String? path) {
                                   _setStatePreservingScroll(() => _recordingPath = path);
                                 },
+                                onRecordingStateChanged: (bool recording) {
+                                  _setStatePreservingScroll(() => _isRecording = recording);
+                                },
                               ),
                             ),
                         ],
                       ],
                     ),
+                    if (_voiceRemindEnabled &&
+                        _voiceRemindMode == _VoiceRemindMode.textAndPreset &&
+                        (_remindTextController.text.trim().isEmpty ||
+                            !_presetVoiceValid))
+                      AppFootnote(
+                        text: l10n.reminderValidationVoice,
+                        color: scheme.error,
+                        padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),
+                      ),
+                    if (_voiceRemindEnabled &&
+                        _voiceRemindMode == _VoiceRemindMode.record)
+                      AppFootnote(
+                        text: _isRecording
+                            ? l10n.reminderRecordingInProgress
+                            : (_recordingPath != null && _recordingPath!.isNotEmpty
+                                ? l10n.reminderRecordingSaved
+                                : l10n.reminderRecordingRequired),
+                        color: _isRecording
+                            ? AppTheme.primaryColor
+                            : (_recordingPath != null && _recordingPath!.isNotEmpty
+                                ? null
+                                : scheme.error),
+                        padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),
+                      ),
                   ],
                   const SizedBox(height: 20),
                   SizedBox(

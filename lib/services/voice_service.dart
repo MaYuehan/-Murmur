@@ -1,7 +1,11 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:murmur/core/utils/app_settings_storage.dart';
+import 'package:murmur/core/utils/voice_recording_storage.dart';
+import 'package:murmur/models/voice_recording_entry.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 
@@ -31,21 +35,37 @@ class VoiceService {
   static final AudioRecorder _recorder = AudioRecorder();
   static final FlutterTts _tts = FlutterTts();
   static bool _ttsReady = false;
+  static String? _activeRecordingPath;
+  static final StreamController<void> _recordingsChangedController =
+      StreamController<void>.broadcast();
+
+  static Stream<void> get onRecordingsChanged =>
+      _recordingsChangedController.stream;
+
+  static void notifyRecordingsChanged() {
+    if (!_recordingsChangedController.isClosed) {
+      _recordingsChangedController.add(null);
+    }
+  }
 
   static const List<VoiceOption> presetVoices = <VoiceOption>[
     VoiceOption(id: 'default', name: 'Default Voice'),
     VoiceOption(id: 'warm_female', name: 'Warm Female Voice'),
     VoiceOption(id: 'calm_male', name: 'Calm Male Voice'),
   ];
-  static String _defaultVoiceId = 'default';
 
-  static String get defaultVoiceId => _defaultVoiceId;
+  static String get defaultVoiceId => AppSettingsStorage.defaultVoiceId;
 
-  static void setDefaultVoice(String voiceId) {
-    _defaultVoiceId = voiceId;
+  static Future<void> bootstrap() async {
+    final Directory voiceRoot = await voiceRootDir();
+    await VoiceRecordingStorage.migrateLegacyRecordings(voiceRoot);
   }
 
-  static Future<Directory> _voiceDir() async {
+  static Future<void> setDefaultVoice(String voiceId) async {
+    await AppSettingsStorage.setDefaultVoiceId(voiceId);
+  }
+
+  static Future<Directory> voiceRootDir() async {
     final Directory dir = await getApplicationDocumentsDirectory();
     final Directory voiceDir = Directory('${dir.path}/voices');
     if (!voiceDir.existsSync()) {
@@ -70,9 +90,11 @@ class VoiceService {
     if (status != MicrophonePermissionStatus.granted) {
       throw StateError('Microphone permission denied');
     }
-    final Directory voiceDir = await _voiceDir();
+    final Directory voiceRoot = await voiceRootDir();
+    final Directory tempDir = await VoiceRecordingStorage.tempDir(voiceRoot);
     final String path =
-        '${voiceDir.path}/recording_${DateTime.now().millisecondsSinceEpoch}.m4a';
+        '${tempDir.path}/recording_${DateTime.now().millisecondsSinceEpoch}.m4a';
+    _activeRecordingPath = path;
     await _recorder.start(
       const RecordConfig(
         encoder: AudioEncoder.aacLc,
@@ -85,7 +107,17 @@ class VoiceService {
   }
 
   static Future<String?> stopRecording() async {
-    return _recorder.stop();
+    final String? stoppedPath = await _recorder.stop();
+    String? result = stoppedPath;
+    if (result == null || result.isEmpty) {
+      result = _activeRecordingPath;
+    }
+    _activeRecordingPath = null;
+    if (result != null && result.isNotEmpty && File(result).existsSync()) {
+      await VoiceRecordingStorage.registerTempRecording(result);
+      notifyRecordingsChanged();
+    }
+    return result;
   }
 
   static Future<void> _ensureTts() async {
@@ -148,20 +180,81 @@ class VoiceService {
   static Stream<void> get onPlaybackComplete =>
       _audioPlayer.onPlayerComplete.map((_) {});
 
-  static Future<List<VoiceOption>> loadRecordings() async {
-    final Directory dir = await _voiceDir();
-    final List<FileSystemEntity> entities = dir.listSync();
-    final List<File> files = entities.whereType<File>().toList()
-      ..sort((File a, File b) => b.path.compareTo(a.path));
+  static Future<List<VoiceRecordingEntry>> loadTemporaryRecordings() async {
+    final Directory voiceRoot = await voiceRootDir();
+    return VoiceRecordingStorage.loadTemporaryRecordings(voiceRoot);
+  }
 
-    return files.map((File file) {
-      final String fileName = file.path.split('/').last;
-      return VoiceOption(
-        id: file.path,
-        name: fileName,
-        filePath: file.path,
-        isCustom: true,
-      );
-    }).toList();
+  static Future<List<VoiceRecordingEntry>> loadSavedRecordings() async {
+    final Directory voiceRoot = await voiceRootDir();
+    return VoiceRecordingStorage.loadSavedRecordings(voiceRoot);
+  }
+
+  static Future<VoiceRecordingEntry> saveRecordingToLibrary({
+    required String tempPath,
+    required String displayName,
+  }) async {
+    final Directory voiceRoot = await voiceRootDir();
+    final VoiceRecordingEntry entry = await VoiceRecordingStorage.saveRecording(
+      voiceRoot: voiceRoot,
+      tempPath: tempPath,
+      displayName: displayName,
+    );
+    notifyRecordingsChanged();
+    return entry;
+  }
+
+  static Future<VoiceRecordingEntry> removeRecordingFromLibrary({
+    required String savedPath,
+  }) async {
+    final Directory voiceRoot = await voiceRootDir();
+    final VoiceRecordingEntry entry = await VoiceRecordingStorage.unsaveRecording(
+      voiceRoot: voiceRoot,
+      savedPath: savedPath,
+    );
+    notifyRecordingsChanged();
+    return entry;
+  }
+
+  static Future<VoiceRecordingEntry> renameRecording({
+    required String filePath,
+    required String displayName,
+  }) async {
+    final VoiceRecordingEntry entry = await VoiceRecordingStorage.renameRecording(
+      filePath: filePath,
+      displayName: displayName,
+    );
+    notifyRecordingsChanged();
+    return entry;
+  }
+
+  static Future<void> deleteRecording(String filePath) async {
+    await VoiceRecordingStorage.deleteRecording(filePath);
+    notifyRecordingsChanged();
+  }
+
+  static Future<void> purgeExpiredRecordings(Set<String> protectedPaths) async {
+    final Directory voiceRoot = await voiceRootDir();
+    await VoiceRecordingStorage.purgeExpiredRecordings(
+      voiceRoot: voiceRoot,
+      protectedPaths: protectedPaths,
+    );
+    notifyRecordingsChanged();
+  }
+
+  static Future<List<VoiceOption>> loadRecordings() async {
+    final Directory voiceRoot = await voiceRootDir();
+    final List<VoiceRecordingEntry> entries =
+        await VoiceRecordingStorage.loadAllPlayableRecordings(voiceRoot);
+    return entries
+        .map(
+          (VoiceRecordingEntry entry) => VoiceOption(
+            id: entry.filePath,
+            name: entry.displayName,
+            filePath: entry.filePath,
+            isCustom: true,
+          ),
+        )
+        .toList();
   }
 }

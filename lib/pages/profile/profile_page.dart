@@ -6,6 +6,8 @@ import 'package:murmur/l10n/app_localizations.dart';
 import 'package:murmur/providers/calendar_week_start_provider.dart';
 import 'package:murmur/providers/locale_provider.dart';
 import 'package:murmur/providers/todo_display_settings_provider.dart';
+import 'package:murmur/pages/profile/profile_recordings_page.dart';
+import 'package:murmur/pages/profile/profile_voices_page.dart';
 import 'package:murmur/widgets/app_ui.dart';
 
 class ProfilePage extends ConsumerStatefulWidget {
@@ -74,6 +76,39 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                     ),
                   ],
                 ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          AppSectionHeader(title: l10n.profileSectionVoice),
+          AppGroupedSection(
+            children: <Widget>[
+              AppListTile(
+                title: l10n.profileOpenVoices,
+                subtitle: l10n.profileOpenVoicesSubtitle,
+                leadingIcon: Icons.graphic_eq_rounded,
+                leadingIconColor: AppTheme.primaryColor,
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (BuildContext context) => const ProfileVoicesPage(),
+                    ),
+                  );
+                },
+              ),
+              AppListTile(
+                title: l10n.profileOpenRecordings,
+                subtitle: l10n.profileOpenRecordingsSubtitle,
+                leadingIcon: Icons.mic_none_rounded,
+                leadingIconColor: AppTheme.iosBlue,
+                showDivider: false,
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (BuildContext context) => const ProfileRecordingsPage(),
+                    ),
+                  );
+                },
               ),
             ],
           ),
@@ -191,12 +226,6 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                 subtitle: l10n.profileHabitLearningSubtitle,
                 leadingIcon: Icons.auto_awesome_outlined,
                 leadingIconColor: AppTheme.primaryColor,
-              ),
-              AppListTile(
-                title: l10n.profileVoiceLibraryTitle,
-                subtitle: l10n.profileVoiceLibrarySubtitle,
-                leadingIcon: Icons.library_music_outlined,
-                leadingIconColor: AppTheme.iosBlue,
               ),
               AppListTile(
                 title: l10n.profileSyncBackupTitle,

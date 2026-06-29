@@ -34,7 +34,7 @@ class AppLocalizations {
   String get comingSoon => _t('即将推出', 'Coming Soon');
   String get navCalendar => _t('日历', 'Calendar');
   String get navTodo => _t('待办', 'Tasks');
-  String get navVoice => _t('声音', 'Voice');
+  String get navFamily => _t('亲友', 'Family');
   String get navProfile => _t('我的', 'Profile');
 
   // Common actions
@@ -68,6 +68,13 @@ class AppLocalizations {
   String get profileSectionLanguage => _t('语言', 'Language');
   String get profileLanguageChinese => _t('中文', 'Chinese');
   String get profileLanguageEnglish => 'English';
+  String get profileSectionVoice => _t('亲声', 'Voice');
+  String get profileOpenVoices => _t('声音', 'Voices');
+  String get profileOpenVoicesSubtitle =>
+      _t('预设声线与自定义声线', 'Preset and custom voices');
+  String get profileOpenRecordings => _t('我的录音', 'My recordings');
+  String get profileOpenRecordingsSubtitle =>
+      _t('近 7 天录音，可收藏命名', 'Last 7 days; save favorites');
   String get profileSectionComingSoon => _t('即将推出', 'Coming Soon');
   String get profileHabitLearningTitle => _t('习惯学习', 'Habit learning');
   String get profileHabitLearningSubtitle =>
@@ -271,10 +278,10 @@ class AppLocalizations {
   String get reminderSheetEdit => _t('编辑日程', 'Edit event');
   String get reminderSectionEvent => _t('日程', 'Event');
   String get reminderFieldContent => _t('内容', 'Content');
-  String get reminderHintContent => _t('例如：给妈妈打电话', 'e.g. Call mom');
+  String get reminderHintContent => _t('填写内容', 'Add content');
   String get reminderValidationContent => _t('请填写提醒内容', 'Please enter content');
   String get reminderFieldNotes => _t('备注', 'Notes');
-  String get reminderHintNotes => _t('例如：妈妈的手机号', 'e.g. Mom’s phone number');
+  String get reminderHintNotes => _t('添加备注', 'Add notes');
   String get reminderSectionTime => _t('时间', 'Time');
   String get reminderSectionRemind => _t('提醒', 'Reminder');
   String get reminderNeedRemind => _t('需要提醒', 'Reminder');
@@ -301,6 +308,7 @@ class AppLocalizations {
   String get reminderReleaseToStop => _t('松开结束', 'Release to stop');
   String get reminderRerecord => _t('重录', 'Re-record');
   String get reminderPreviewRecording => _t('试听录音', 'Preview recording');
+  String get reminderPreviewPlay => _t('预览播放', 'Preview play');
   String get reminderValidationVoice =>
       _t('请填写提醒文案并选择提醒声音', 'Enter reminder text and choose a voice');
   String get reminderRecordingInProgress =>
@@ -399,14 +407,41 @@ class AppLocalizations {
   // Voice page
   String get voicePageTitle => _t('声音', 'Voice');
   String get voicePlaying => _t('正在播放...', 'Playing...');
-  String get voiceSectionPresets => _t('预设亲声', 'Preset voices');
+  String get voiceSectionPresets => _t('预设声线', 'Preset voices');
+  String get voiceSectionCustom => _t('自定义声线', 'Custom voice');
+  String get voiceCustomCloneHint => _t(
+        '文案亲声目前使用系统 TTS 朗读。录制亲声可直接使用你的声音。完整声音克隆（用少量样本生成专属声线）正在筹备中。',
+        'Text reminders use system TTS. Recorded voice uses your own audio. Full voice cloning from short samples is coming soon.',
+      );
+  String get voicePresetDefault => _t('默认', 'Default');
+  String get voicePresetWarmFemale => _t('温柔女声', 'Warm female');
+  String get voicePresetCalmMale => _t('沉稳男声', 'Calm male');
   String get voiceTapToPreview => _t('点击预览', 'Tap to preview');
   String get voiceSectionRecordings => _t('我的录音', 'My recordings');
-  String get voiceEmptyRecordings => _t(
-        '还没有录音\n可在创建日程时录制',
-        'No recordings yet\nRecord when creating an event',
+  String get voiceRecordingsRetentionHint => _t(
+        '录音保留近 7 天，过期自动删除。收藏后可永久保存并命名。',
+        'Recordings are kept for 7 days, then removed. Save favorites to keep them.',
       );
-  String get voiceLocalRecording => _t('本地录音', 'Local recording');
+  String get voiceSectionSavedRecordings => _t('已收藏', 'Saved');
+  String get voiceSectionRecentRecordings => _t('近 7 天', 'Last 7 days');
+  String get voiceEmptyRecordings => _t(
+        '还没有录音\n可在创建日程或待办时录制',
+        'No recordings yet\nRecord when creating an event or task',
+      );
+  String get voiceEmptySavedRecordings => _t('暂无收藏录音', 'No saved recordings');
+  String voiceRecordingExpiresIn(int days) =>
+      _t('还剩 $days 天', '$days days left');
+  String get voiceSaveRecording => _t('收藏', 'Save');
+  String get voiceSaveRecordingTitle => _t('收藏录音', 'Save recording');
+  String get voiceSaveRecordingNameHint => _t('给录音起个名字', 'Name this recording');
+  String get voiceRenameRecordingTitle => _t('重命名录音', 'Rename recording');
+  String get voiceRecordingSavedToast => _t('已收藏', 'Saved');
+  String get voiceUnsaveRecordingTitle => _t('取消收藏', 'Remove from saved');
+  String voiceUnsaveRecordingMessage(String name) =>
+      _t('确定取消收藏「$name」吗？录音将移回近 7 天列表。', 'Remove "$name" from saved? It will move back to your last 7 days list.');
+  String get voiceUnsaveRecordingConfirm => _t('取消收藏', 'Remove');
+  String get voiceRecordingUnsavedToast => _t('已取消收藏', 'Removed from saved');
+  String get voiceLocalRecording => _t('临时录音', 'Temporary recording');
   String get voiceMyRecording => _t('我的录音', 'My recording');
   String get voiceDefaultPreset => _t('默认亲声', 'Default voice');
 
@@ -419,6 +454,14 @@ class AppLocalizations {
   String get voiceRecordingShort => _t('正在录音...', 'Recording...');
   String voiceMyRecordingsCount(int count) =>
       _t('我的录音：$count', 'My recordings: $count');
+
+  // Family page
+  String get familyPageTitle => _t('亲友', 'Family');
+  String get familyPlaceholderTitle => _t('亲友功能即将推出', 'Family features coming soon');
+  String get familyPlaceholderSubtitle => _t(
+        '在这里关心家人朋友的日程与提醒',
+        'Stay connected with loved ones’ schedules and reminders',
+      );
 
   // Notifications
   String get notificationDefaultBody => _t(

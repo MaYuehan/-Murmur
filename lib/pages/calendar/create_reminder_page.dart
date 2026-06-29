@@ -14,6 +14,7 @@ import 'package:murmur/widgets/inline_datetime_picker.dart';
 import 'package:murmur/widgets/inline_repeat_days_picker.dart';
 import 'package:murmur/widgets/inline_time_picker.dart';
 import 'package:murmur/widgets/voice_record_panel.dart';
+import 'package:murmur/widgets/voice_text_preview_panel.dart';
 import 'package:murmur/widgets/inline_time_range_picker.dart';
 
 enum _VoiceRemindMode { textAndPreset, record }
@@ -978,6 +979,10 @@ class _CreateReminderPageState extends ConsumerState<CreateReminderPage> {
                           placeholder: !_presetVoiceValid,
                           onTap: _pickPresetVoice,
                           showDivider: false,
+                        ),
+                        VoiceTextPreviewPanel(
+                          text: _remindTextController.text,
+                          voiceId: _voiceSelection,
                         ),
                       ] else
                         Padding(

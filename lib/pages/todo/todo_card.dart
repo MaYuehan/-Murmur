@@ -483,7 +483,8 @@ class _TodoCardState extends State<TodoCard> {
                     children: <Widget>[
                   widget.editing
                       ? Focus(
-                          focusNode: _titleFocusNode,
+                          skipTraversal: true,
+                          canRequestFocus: false,
                           onKeyEvent: _onTitleKeyEvent,
                           child: TextField(
                             controller: _titleController,

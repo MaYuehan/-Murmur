@@ -759,7 +759,8 @@ class _SubItemRowState extends ConsumerState<_SubItemRow> {
               padding: const EdgeInsets.only(top: 10, bottom: 10),
               child: widget.editing
                   ? Focus(
-                      focusNode: _titleFocusNode,
+                      skipTraversal: true,
+                      canRequestFocus: false,
                       onKeyEvent: _onTitleKeyEvent,
                       child: TextField(
                         controller: _titleController,

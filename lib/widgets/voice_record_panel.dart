@@ -5,6 +5,7 @@ import 'package:murmur/core/theme/app_theme.dart';
 import 'package:murmur/core/utils/microphone_permission.dart';
 import 'package:murmur/l10n/app_localizations.dart';
 import 'package:murmur/services/voice_service.dart';
+import 'package:murmur/widgets/voice_preview_button.dart';
 
 class VoiceRecordPanel extends StatefulWidget {
   const VoiceRecordPanel({
@@ -23,6 +24,9 @@ class VoiceRecordPanel extends StatefulWidget {
 }
 
 class _VoiceRecordPanelState extends State<VoiceRecordPanel> {
+  static const double _recordButtonSize = 68;
+  static const double _recordButtonRingSize = 84;
+
   bool _isRecording = false;
   bool _isPreviewPlaying = false;
   bool _holdActive = false;
@@ -128,102 +132,119 @@ class _VoiceRecordPanelState extends State<VoiceRecordPanel> {
     setState(() => _isPreviewPlaying = true);
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final AppLocalizations l10n = AppLocalizations.of(context);
-    final String holdLabel = _isRecording
-        ? l10n.reminderReleaseToStop
-        : (_hasRecording ? l10n.reminderRerecord : l10n.reminderHoldToRecord);
+  String _recordHint(AppLocalizations l10n) {
+    if (_isRecording) {
+      return l10n.reminderReleaseToStop;
+    }
+    if (_hasRecording) {
+      return l10n.reminderRerecord;
+    }
+    return l10n.reminderHoldToRecord;
+  }
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: <Widget>[
-          if (_hasRecording) ...<Widget>[
-            _PreviewButton(
-              isPlaying: _isPreviewPlaying,
-              onPressed: _togglePreview,
-            ),
-            const SizedBox(width: 12),
-          ],
-          Listener(
-            onPointerDown: (_) => unawaited(_beginRecording()),
-            onPointerUp: (_) => unawaited(_finishRecording()),
-            onPointerCancel: (_) => unawaited(_finishRecording()),
-            child: AnimatedContainer(
+  Widget _buildRecordButton() {
+    return Listener(
+      onPointerDown: (_) => unawaited(_beginRecording()),
+      onPointerUp: (_) => unawaited(_finishRecording()),
+      onPointerCancel: (_) => unawaited(_finishRecording()),
+      child: SizedBox(
+        width: _recordButtonRingSize,
+        height: _recordButtonRingSize,
+        child: Stack(
+          alignment: Alignment.center,
+          children: <Widget>[
+            if (!_isRecording)
+              Container(
+                width: _recordButtonRingSize,
+                height: _recordButtonRingSize,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: AppTheme.primaryColor.withValues(alpha: 0.18),
+                    width: 2,
+                  ),
+                ),
+              ),
+            AnimatedContainer(
               duration: const Duration(milliseconds: 150),
               curve: Curves.easeOut,
-              height: 48,
-              padding: const EdgeInsets.symmetric(horizontal: 28),
+              width: _isRecording ? _recordButtonRingSize : _recordButtonSize,
+              height: _isRecording ? _recordButtonRingSize : _recordButtonSize,
               decoration: BoxDecoration(
                 color: _isRecording
                     ? AppTheme.primaryColor
-                    : AppTheme.primaryColor.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(24),
+                    : AppTheme.primaryColor.withValues(alpha: 0.14),
+                shape: BoxShape.circle,
                 boxShadow: _isRecording
                     ? <BoxShadow>[
                         BoxShadow(
-                          color: AppTheme.primaryColor.withValues(alpha: 0.28),
-                          blurRadius: 12,
+                          color: AppTheme.primaryColor.withValues(alpha: 0.3),
+                          blurRadius: 16,
                           offset: const Offset(0, 4),
                         ),
                       ]
                     : null,
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  Icon(
-                    Icons.mic_rounded,
-                    size: 20,
-                    color: _isRecording ? Colors.white : AppTheme.primaryColor,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    holdLabel,
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: _isRecording ? Colors.white : AppTheme.primaryColor,
-                    ),
-                  ),
-                ],
+              child: Icon(
+                Icons.mic_rounded,
+                size: _isRecording ? 34 : 30,
+                color: _isRecording ? Colors.white : AppTheme.primaryColor,
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
-}
-
-class _PreviewButton extends StatelessWidget {
-  const _PreviewButton({
-    required this.isPlaying,
-    required this.onPressed,
-  });
-
-  final bool isPlaying;
-  final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: AppTheme.primaryColor.withValues(alpha: 0.12),
-      shape: const CircleBorder(),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onPressed,
-        child: SizedBox(
-          width: 44,
-          height: 44,
-          child: Icon(
-            isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
-            color: AppTheme.primaryColor,
-            size: 26,
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    final ColorScheme scheme = Theme.of(context).colorScheme;
+    final String recordHint = _recordHint(l10n);
+
+    final Widget recordSection = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: <Widget>[
+        _buildRecordButton(),
+        const SizedBox(height: 8),
+        Text(
+          recordHint,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: _hasRecording ? 13 : 14,
+            fontWeight: FontWeight.w500,
+            color: _isRecording
+                ? AppTheme.primaryColor
+                : AppTheme.secondaryLabelColor,
           ),
         ),
+        if (_hasRecording && !_isRecording) ...<Widget>[
+          const SizedBox(height: 16),
+          VoicePreviewButton(
+            isPlaying: _isPreviewPlaying,
+            onPressed: _togglePreview,
+          ),
+        ],
+      ],
+    );
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 8, 14, 14),
+      child: SizedBox(
+        width: double.infinity,
+        child: _hasRecording
+            ? Container(
+                width: double.infinity,
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
+                decoration: BoxDecoration(
+                  color: scheme.primary.withValues(alpha: 0.06),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: recordSection,
+              )
+            : recordSection,
       ),
     );
   }
