@@ -4,8 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:murmur/core/theme/app_theme.dart';
 import 'package:murmur/core/utils/microphone_permission.dart';
 import 'package:murmur/l10n/app_localizations.dart';
+import 'package:murmur/models/voice_recording_entry.dart';
 import 'package:murmur/services/voice_service.dart';
-import 'package:murmur/widgets/voice_preview_button.dart';
+import 'package:murmur/widgets/app_ui.dart';
+
+enum _RecordInputMode { record, saved }
 
 class VoiceRecordPanel extends StatefulWidget {
   const VoiceRecordPanel({
@@ -26,35 +29,163 @@ class VoiceRecordPanel extends StatefulWidget {
 class _VoiceRecordPanelState extends State<VoiceRecordPanel> {
   static const double _recordButtonSize = 68;
   static const double _recordButtonRingSize = 84;
+  static const double _rerecordIdleSize = 52;
+  static const double _rerecordActiveSize = 72;
+  static const double _rerecordActiveRingSize = 80;
+  static const double _compactControlHeight = 44;
 
+  _RecordInputMode _inputMode = _RecordInputMode.record;
+  String? _tempRecordingPath;
+  String? _savedRecordingPath;
   bool _isRecording = false;
   bool _isPreviewPlaying = false;
   bool _holdActive = false;
   Timer? _maxDurationTimer;
   StreamSubscription<void>? _playbackSub;
+  StreamSubscription<void>? _recordingsChangedSub;
+  List<VoiceRecordingEntry> _savedRecordings = <VoiceRecordingEntry>[];
 
-  bool get _hasRecording =>
-      widget.recordingPath != null && widget.recordingPath!.isNotEmpty;
+  String? get _activePath => _inputMode == _RecordInputMode.record
+      ? _tempRecordingPath
+      : _savedRecordingPath;
 
   @override
   void initState() {
     super.initState();
+    _applyExternalPath(widget.recordingPath);
+    unawaited(_loadSavedRecordings());
     _playbackSub = VoiceService.onPlaybackComplete.listen((_) {
       if (!mounted) {
         return;
       }
       setState(() => _isPreviewPlaying = false);
     });
+    _recordingsChangedSub = VoiceService.onRecordingsChanged.listen((_) {
+      if (!mounted) {
+        return;
+      }
+      unawaited(_loadSavedRecordings());
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant VoiceRecordPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.recordingPath != widget.recordingPath) {
+      _applyExternalPath(widget.recordingPath);
+    }
+  }
+
+  void _applyExternalPath(String? path) {
+    if (path == null || path.isEmpty) {
+      return;
+    }
+    if (path.contains('/saved/')) {
+      _savedRecordingPath = path;
+      _inputMode = _RecordInputMode.saved;
+    } else {
+      _tempRecordingPath = path;
+      _inputMode = _RecordInputMode.record;
+    }
   }
 
   @override
   void dispose() {
     _maxDurationTimer?.cancel();
-    _playbackSub?.cancel();
+    unawaited(_playbackSub?.cancel());
+    unawaited(_recordingsChangedSub?.cancel());
     if (_isPreviewPlaying) {
       unawaited(VoiceService.stop());
     }
     super.dispose();
+  }
+
+  Future<void> _loadSavedRecordings() async {
+    final List<VoiceRecordingEntry> saved = await VoiceService.loadSavedRecordings();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _savedRecordings = saved;
+      if (_savedRecordingPath != null &&
+          !saved.any((VoiceRecordingEntry entry) => entry.filePath == _savedRecordingPath)) {
+        _savedRecordingPath = null;
+        if (_inputMode == _RecordInputMode.saved) {
+          widget.onRecordingPathChanged(null);
+        }
+      }
+    });
+  }
+
+  String? _savedSelectionLabel() {
+    if (_savedRecordingPath == null) {
+      return null;
+    }
+    for (final VoiceRecordingEntry entry in _savedRecordings) {
+      if (entry.filePath == _savedRecordingPath) {
+        return entry.displayName;
+      }
+    }
+    return _savedRecordingPath!.split('/').last;
+  }
+
+  Future<void> _stopPreview() async {
+    await VoiceService.stop();
+    if (!mounted) {
+      return;
+    }
+    setState(() => _isPreviewPlaying = false);
+  }
+
+  void _notifyActivePath() {
+    widget.onRecordingPathChanged(_activePath);
+  }
+
+  Future<void> _selectInputMode(_RecordInputMode mode) async {
+    if (_inputMode == mode) {
+      return;
+    }
+    await _stopPreview();
+    if (!mounted) {
+      return;
+    }
+    setState(() => _inputMode = mode);
+    _notifyActivePath();
+  }
+
+  Future<void> _pickSavedRecording() async {
+    if (_savedRecordings.isEmpty) {
+      return;
+    }
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    await _stopPreview();
+    if (!mounted) {
+      return;
+    }
+
+    final String? picked = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: AppTheme.groupedBackgroundColor,
+      builder: (BuildContext sheetContext) {
+        return _SavedRecordingPickerSheet(
+          title: l10n.voicePickSavedRecordingTitle,
+          recordings: _savedRecordings,
+          currentPath: _savedRecordingPath,
+        );
+      },
+    );
+    if (picked == null || picked.isEmpty || !mounted) {
+      return;
+    }
+    if (picked == _savedRecordingPath && _inputMode == _RecordInputMode.saved) {
+      return;
+    }
+    setState(() {
+      _savedRecordingPath = picked;
+      _inputMode = _RecordInputMode.saved;
+    });
+    _notifyActivePath();
   }
 
   void _setRecording(bool value) {
@@ -73,10 +204,7 @@ class _VoiceRecordPanelState extends State<VoiceRecordPanel> {
       return;
     }
     try {
-      await VoiceService.stop();
-      if (mounted) {
-        setState(() => _isPreviewPlaying = false);
-      }
+      await _stopPreview();
       await VoiceService.startRecording();
       if (!mounted) {
         return;
@@ -107,42 +235,56 @@ class _VoiceRecordPanelState extends State<VoiceRecordPanel> {
     setState(() {
       _holdActive = false;
       if (path != null && path.isNotEmpty) {
-        widget.onRecordingPathChanged(path);
+        _tempRecordingPath = path;
+        _inputMode = _RecordInputMode.record;
       }
     });
     _setRecording(false);
+    _notifyActivePath();
   }
 
   Future<void> _togglePreview() async {
-    if (!_hasRecording) {
+    if (_tempRecordingPath == null || _tempRecordingPath!.isEmpty) {
       return;
     }
     if (_isPreviewPlaying) {
-      await VoiceService.stop();
-      if (!mounted) {
-        return;
-      }
-      setState(() => _isPreviewPlaying = false);
+      await _stopPreview();
       return;
     }
-    await VoiceService.play(voicePath: widget.recordingPath);
+    await VoiceService.play(voicePath: _tempRecordingPath);
     if (!mounted) {
       return;
     }
     setState(() => _isPreviewPlaying = true);
   }
 
-  String _recordHint(AppLocalizations l10n) {
-    if (_isRecording) {
-      return l10n.reminderReleaseToStop;
+  Widget _buildInputModeSelector(AppLocalizations l10n) {
+    if (_savedRecordings.isEmpty) {
+      return const SizedBox.shrink();
     }
-    if (_hasRecording) {
-      return l10n.reminderRerecord;
-    }
-    return l10n.reminderHoldToRecord;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(0, 0, 0, 12),
+      child: Center(
+        child: AppUnderlineTabControl<_RecordInputMode>(
+          options: <AppSegmentOption<_RecordInputMode>>[
+            AppSegmentOption(
+              value: _RecordInputMode.record,
+              label: l10n.voiceRecordInputTab,
+            ),
+            AppSegmentOption(
+              value: _RecordInputMode.saved,
+              label: l10n.voiceSavedInputTab,
+            ),
+          ],
+          selected: _inputMode,
+          onChanged: (_RecordInputMode mode) => unawaited(_selectInputMode(mode)),
+        ),
+      ),
+    );
   }
 
-  Widget _buildRecordButton() {
+  Widget _buildInitialRecordButton() {
     return Listener(
       onPointerDown: (_) => unawaited(_beginRecording()),
       onPointerUp: (_) => unawaited(_finishRecording()),
@@ -197,54 +339,351 @@ class _VoiceRecordPanelState extends State<VoiceRecordPanel> {
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final AppLocalizations l10n = AppLocalizations.of(context);
-    final ColorScheme scheme = Theme.of(context).colorScheme;
-    final String recordHint = _recordHint(l10n);
+  Widget _buildRerecordButton() {
+    final double micSize =
+        _isRecording ? _rerecordActiveSize : _rerecordIdleSize;
+    final double ringSize =
+        _isRecording ? _rerecordActiveRingSize : _rerecordIdleSize + 10;
 
-    final Widget recordSection = Column(
+    return Listener(
+      onPointerDown: (_) => unawaited(_beginRecording()),
+      onPointerUp: (_) => unawaited(_finishRecording()),
+      onPointerCancel: (_) => unawaited(_finishRecording()),
+      child: SizedBox(
+        width: ringSize,
+        height: ringSize,
+        child: Stack(
+          alignment: Alignment.center,
+          children: <Widget>[
+            if (!_isRecording)
+              Container(
+                width: ringSize,
+                height: ringSize,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: AppTheme.primaryColor.withValues(alpha: 0.18),
+                    width: 1.5,
+                  ),
+                ),
+              ),
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              curve: Curves.easeOut,
+              width: micSize,
+              height: micSize,
+              decoration: BoxDecoration(
+                color: _isRecording
+                    ? AppTheme.primaryColor
+                    : AppTheme.primaryColor.withValues(alpha: 0.14),
+                shape: BoxShape.circle,
+                boxShadow: _isRecording
+                    ? <BoxShadow>[
+                        BoxShadow(
+                          color: AppTheme.primaryColor.withValues(alpha: 0.28),
+                          blurRadius: 12,
+                          offset: const Offset(0, 3),
+                        ),
+                      ]
+                    : null,
+              ),
+              child: Icon(
+                Icons.mic_rounded,
+                size: _isRecording ? 30 : 24,
+                color: _isRecording ? Colors.white : AppTheme.primaryColor,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCompactPreviewButton(AppLocalizations l10n) {
+    final ColorScheme scheme = Theme.of(context).colorScheme;
+
+    return SizedBox(
+      width: double.infinity,
+      height: _compactControlHeight,
+      child: OutlinedButton.icon(
+        onPressed: () => unawaited(_togglePreview()),
+        icon: Icon(
+          _isPreviewPlaying ? Icons.stop_rounded : Icons.play_arrow_rounded,
+          size: 20,
+        ),
+        label: Text(
+          _isPreviewPlaying ? l10n.voiceStop : l10n.reminderPreviewPlay,
+        ),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: scheme.primary,
+          side: BorderSide(color: scheme.primary.withValues(alpha: 0.35)),
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          minimumSize: const Size(0, _compactControlHeight),
+          textStyle: const TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+            color: AppTheme.textPrimaryColor,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCompactRecordedRow(AppLocalizations l10n) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: <Widget>[
+          Expanded(
+            flex: 3,
+            child: _isRecording
+                ? SizedBox(
+                    height: _compactControlHeight,
+                    child: Center(
+                      child: Text(
+                        l10n.reminderReleaseToStop,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: AppTheme.primaryColor,
+                        ),
+                      ),
+                    ),
+                  )
+                : _buildCompactPreviewButton(l10n),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            flex: 2,
+            child: Center(child: _buildRerecordButton()),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRecordSection(AppLocalizations l10n) {
+    final bool hasTempRecording =
+        _tempRecordingPath != null && _tempRecordingPath!.isNotEmpty;
+
+    if (hasTempRecording) {
+      return _buildCompactRecordedRow(l10n);
+    }
+
+    return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.center,
       children: <Widget>[
-        _buildRecordButton(),
+        _buildInitialRecordButton(),
         const SizedBox(height: 8),
         Text(
-          recordHint,
+          _isRecording ? l10n.reminderReleaseToStop : l10n.reminderHoldToRecord,
           textAlign: TextAlign.center,
           style: TextStyle(
-            fontSize: _hasRecording ? 13 : 14,
+            fontSize: 14,
             fontWeight: FontWeight.w500,
             color: _isRecording
                 ? AppTheme.primaryColor
                 : AppTheme.secondaryLabelColor,
           ),
         ),
-        if (_hasRecording && !_isRecording) ...<Widget>[
-          const SizedBox(height: 16),
-          VoicePreviewButton(
-            isPlaying: _isPreviewPlaying,
-            onPressed: _togglePreview,
-          ),
-        ],
       ],
     );
+  }
+
+  Widget _buildSavedSection(AppLocalizations l10n) {
+    final String? savedSelectionLabel = _savedSelectionLabel();
+
+    return AppDetailTile(
+      icon: Icons.favorite_rounded,
+      iconColor: AppTheme.primaryColor,
+      title: l10n.voicePickSavedRecording,
+      value: savedSelectionLabel ?? l10n.commonPleaseSelect,
+      placeholder: savedSelectionLabel == null,
+      onTap: _pickSavedRecording,
+      showDivider: false,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 8, 14, 14),
-      child: SizedBox(
-        width: double.infinity,
-        child: _hasRecording
-            ? Container(
-                width: double.infinity,
-                padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
-                decoration: BoxDecoration(
-                  color: scheme.primary.withValues(alpha: 0.06),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: recordSection,
-              )
-            : recordSection,
+      padding: const EdgeInsets.fromLTRB(0, 8, 0, 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          _buildInputModeSelector(l10n),
+          if (_savedRecordings.isEmpty || _inputMode == _RecordInputMode.record)
+            _buildRecordSection(l10n)
+          else
+            _buildSavedSection(l10n),
+        ],
+      ),
+    );
+  }
+}
+
+class _SavedRecordingPickerSheet extends StatefulWidget {
+  const _SavedRecordingPickerSheet({
+    required this.title,
+    required this.recordings,
+    this.currentPath,
+  });
+
+  final String title;
+  final List<VoiceRecordingEntry> recordings;
+  final String? currentPath;
+
+  @override
+  State<_SavedRecordingPickerSheet> createState() => _SavedRecordingPickerSheetState();
+}
+
+class _SavedRecordingPickerSheetState extends State<_SavedRecordingPickerSheet> {
+  String? _playingPath;
+  StreamSubscription<void>? _playbackSub;
+
+  @override
+  void initState() {
+    super.initState();
+    _playbackSub = VoiceService.onPlaybackComplete.listen((_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() => _playingPath = null);
+    });
+  }
+
+  @override
+  void dispose() {
+    unawaited(_playbackSub?.cancel());
+    if (_playingPath != null) {
+      unawaited(VoiceService.stop());
+    }
+    super.dispose();
+  }
+
+  Future<void> _togglePreview(VoiceRecordingEntry entry) async {
+    final bool isPlayingThis = _playingPath == entry.filePath;
+    if (isPlayingThis) {
+      await VoiceService.stop();
+      if (!mounted) {
+        return;
+      }
+      setState(() => _playingPath = null);
+      return;
+    }
+    await VoiceService.stop();
+    await VoiceService.play(voicePath: entry.filePath);
+    if (!mounted) {
+      return;
+    }
+    setState(() => _playingPath = entry.filePath);
+  }
+
+  Widget _playButton({
+    required bool isPlayingThis,
+    required VoidCallback onPressed,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onPressed,
+        customBorder: const CircleBorder(),
+        child: Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: AppTheme.iosBlue.withValues(alpha: 0.12),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(
+            isPlayingThis ? Icons.pause_rounded : Icons.play_arrow_rounded,
+            size: 20,
+            color: AppTheme.iosBlue,
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+            child: Text(
+              widget.title,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+          ),
+          AppGroupedSection(
+            children: <Widget>[
+              ...widget.recordings.asMap().entries.map((MapEntry<int, VoiceRecordingEntry> entry) {
+                final VoiceRecordingEntry recording = entry.value;
+                final bool isSelected = recording.filePath == widget.currentPath;
+                final bool isPlayingThis = _playingPath == recording.filePath;
+                final bool isLast = entry.key == widget.recordings.length - 1;
+
+                return Column(
+                  children: <Widget>[
+                    Material(
+                      color: AppTheme.cardColor,
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+                        child: Row(
+                          children: <Widget>[
+                            _playButton(
+                              isPlayingThis: isPlayingThis,
+                              onPressed: () => unawaited(_togglePreview(recording)),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: InkWell(
+                                onTap: () => Navigator.of(context).pop(recording.filePath),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 4),
+                                  child: Text(
+                                    recording.displayName,
+                                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                          fontWeight:
+                                              isSelected ? FontWeight.w600 : FontWeight.w400,
+                                        ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            if (isSelected)
+                              const Icon(
+                                Icons.check,
+                                color: AppTheme.iosBlue,
+                                size: 22,
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    if (!isLast)
+                      const Divider(
+                        height: 1,
+                        thickness: 0.5,
+                        indent: 62,
+                        color: AppTheme.separatorColor,
+                      ),
+                  ],
+                );
+              }),
+            ],
+          ),
+          const SizedBox(height: 16),
+        ],
       ),
     );
   }

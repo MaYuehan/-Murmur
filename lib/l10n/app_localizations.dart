@@ -441,6 +441,11 @@ class AppLocalizations {
       _t('确定取消收藏「$name」吗？录音将移回近 7 天列表。', 'Remove "$name" from saved? It will move back to your last 7 days list.');
   String get voiceUnsaveRecordingConfirm => _t('取消收藏', 'Remove');
   String get voiceRecordingUnsavedToast => _t('已取消收藏', 'Removed from saved');
+  String get voicePickSavedRecording => _t('收藏录音', 'Saved recording');
+  String get voicePickSavedRecordingTitle => _t('选择收藏录音', 'Choose saved recording');
+  String get voiceRecordInputTab => _t('录制', 'Record');
+  String get voiceSavedInputTab => _t('收藏', 'Saved');
+  String get voiceOrDivider => _t('或', 'or');
   String get voiceLocalRecording => _t('临时录音', 'Temporary recording');
   String get voiceMyRecording => _t('我的录音', 'My recording');
   String get voiceDefaultPreset => _t('默认亲声', 'Default voice');
