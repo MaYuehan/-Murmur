@@ -79,8 +79,13 @@ class _CreateReminderPageState extends ConsumerState<CreateReminderPage> {
   List<int> _remindRepeatDays = <int>[];
   late String _voiceSelection;
   late _VoiceRemindMode _voiceRemindMode;
+  late _VoiceRemindMode _effectiveVoiceRemindMode;
   String? _recordingPath;
   bool _isRecording = false;
+  VoiceRecordPanelStatus _voiceRecordStatus = const VoiceRecordPanelStatus(
+    inputMode: VoiceRecordInputMode.record,
+    hasSelection: false,
+  );
   _ExpandedField _expandedField = _ExpandedField.none;
 
   bool get _isEditing => widget.editingReminder != null;
@@ -145,9 +150,11 @@ class _CreateReminderPageState extends ConsumerState<CreateReminderPage> {
           existing.voicePath != null &&
           existing.voicePath!.isNotEmpty) {
         _voiceRemindMode = _VoiceRemindMode.record;
+        _effectiveVoiceRemindMode = _VoiceRemindMode.record;
         _recordingPath = existing.voicePath;
       } else {
         _voiceRemindMode = _VoiceRemindMode.textAndPreset;
+        _effectiveVoiceRemindMode = _VoiceRemindMode.textAndPreset;
       }
       return;
     }
@@ -162,6 +169,7 @@ class _CreateReminderPageState extends ConsumerState<CreateReminderPage> {
     _remindEnabled = true;
     _voiceRemindEnabled = false;
     _voiceRemindMode = _VoiceRemindMode.textAndPreset;
+    _effectiveVoiceRemindMode = _VoiceRemindMode.textAndPreset;
     _remindOffset = ReminderTimeRules.offsetAtTime;
     _remindFrequency = 'once';
     _voiceSelection = VoiceService.defaultVoiceId;
@@ -300,14 +308,43 @@ class _CreateReminderPageState extends ConsumerState<CreateReminderPage> {
       );
       return;
     }
-    _setStatePreservingScroll(() => _remindTextController.text = title);
+    _setStatePreservingScroll(() {
+      _commitTextVoiceMode();
+      _remindTextController.text = title;
+    });
+  }
+
+  void _commitTextVoiceMode() {
+    if (_effectiveVoiceRemindMode == _VoiceRemindMode.textAndPreset) {
+      return;
+    }
+    _effectiveVoiceRemindMode = _VoiceRemindMode.textAndPreset;
+    _recordingPath = null;
+  }
+
+  void _commitRecordVoiceMode(String path) {
+    if (_effectiveVoiceRemindMode == _VoiceRemindMode.record &&
+        _recordingPath == path) {
+      return;
+    }
+    _effectiveVoiceRemindMode = _VoiceRemindMode.record;
+    _recordingPath = path;
+    _remindTextController.clear();
+  }
+
+  void _onRecordingPathChanged(String? path) {
+    if (path != null && path.isNotEmpty) {
+      _setStatePreservingScroll(() => _commitRecordVoiceMode(path));
+      return;
+    }
+    _setStatePreservingScroll(() => _recordingPath = path);
   }
 
   bool _isVoiceRemindReady() {
     if (!_voiceRemindEnabled) {
       return true;
     }
-    if (_voiceRemindMode == _VoiceRemindMode.textAndPreset) {
+    if (_effectiveVoiceRemindMode == _VoiceRemindMode.textAndPreset) {
       return _remindTextController.text.trim().isNotEmpty &&
           VoiceService.presetVoices.any((VoiceOption v) => v.id == _voiceSelection);
     }
@@ -449,11 +486,17 @@ class _CreateReminderPageState extends ConsumerState<CreateReminderPage> {
     if (picked == null || !mounted) {
       return;
     }
-    setState(() => _voiceSelection = picked);
+    setState(() {
+      _commitTextVoiceMode();
+      _voiceSelection = picked;
+    });
     _restoreScrollOffset(scrollOffset);
   }
 
   bool get _canSave {
+    if (_titleController.text.trim().isEmpty) {
+      return false;
+    }
     if (_remindEnabled &&
         ReminderTimeRules.usesRepeatDaySelection(_remindFrequency) &&
         _remindRepeatDays.isEmpty) {
@@ -517,11 +560,11 @@ class _CreateReminderPageState extends ConsumerState<CreateReminderPage> {
     final DateTime? finalRemindAt = _computedRemindAt;
     final String notes = _notesController.text.trim();
     final String? remindText = _voiceRemindEnabled &&
-            _voiceRemindMode == _VoiceRemindMode.textAndPreset
+            _effectiveVoiceRemindMode == _VoiceRemindMode.textAndPreset
         ? _remindTextController.text.trim()
         : null;
     final voiceFields = _voiceRemindEnabled
-        ? (_voiceRemindMode == _VoiceRemindMode.record
+        ? (_effectiveVoiceRemindMode == _VoiceRemindMode.record
             ? (
                 soundId: 'my_recorded_voice',
                 voiceId: 'my_recorded_voice',
@@ -679,6 +722,14 @@ class _CreateReminderPageState extends ConsumerState<CreateReminderPage> {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final DateTime? remindPreview = _computedRemindAt;
     final ColorScheme scheme = Theme.of(context).colorScheme;
+    final String? voiceRecordFootnote =
+        _effectiveVoiceRemindMode == _VoiceRemindMode.record
+        ? VoiceRecordPanelStatus.footnoteFor(
+            l10n: l10n,
+            status: _voiceRecordStatus,
+            isRecording: _isRecording,
+          )
+        : null;
 
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
@@ -741,6 +792,7 @@ class _CreateReminderPageState extends ConsumerState<CreateReminderPage> {
                       }
                       return null;
                     },
+                    onChanged: (_) => setState(() {}),
                   ),
                   AppDetailTextField(
                     icon: Icons.notes_outlined,
@@ -961,7 +1013,9 @@ class _CreateReminderPageState extends ConsumerState<CreateReminderPage> {
                           label: l10n.reminderRemindText,
                           controller: _remindTextController,
                           hintText: l10n.reminderRemindTextHint,
-                          onChanged: (_) => setState(() {}),
+                          onChanged: (_) {
+                            _setStatePreservingScroll(_commitTextVoiceMode);
+                          },
                         ),
                         AppDetailActionTile(
                           icon: Icons.content_copy_outlined,
@@ -989,11 +1043,12 @@ class _CreateReminderPageState extends ConsumerState<CreateReminderPage> {
                           padding: const EdgeInsets.fromLTRB(14, 8, 14, 14),
                           child: VoiceRecordPanel(
                             recordingPath: _recordingPath,
-                            onRecordingPathChanged: (String? path) {
-                              _setStatePreservingScroll(() => _recordingPath = path);
-                            },
+                            onRecordingPathChanged: _onRecordingPathChanged,
                             onRecordingStateChanged: (bool recording) {
                               _setStatePreservingScroll(() => _isRecording = recording);
+                            },
+                            onStatusChanged: (VoiceRecordPanelStatus status) {
+                              _setStatePreservingScroll(() => _voiceRecordStatus = status);
                             },
                           ),
                         ),
@@ -1001,25 +1056,21 @@ class _CreateReminderPageState extends ConsumerState<CreateReminderPage> {
                   ],
                 ),
                 if (_voiceRemindEnabled &&
-                    _voiceRemindMode == _VoiceRemindMode.textAndPreset &&
+                    _effectiveVoiceRemindMode == _VoiceRemindMode.textAndPreset &&
                     (_remindTextController.text.trim().isEmpty || !_presetVoiceValid))
                   AppFootnote(
                     text: l10n.reminderValidationVoice,
                     color: scheme.error,
                     padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),
                   ),
-                if (_voiceRemindEnabled && _voiceRemindMode == _VoiceRemindMode.record)
+                if (_voiceRemindEnabled &&
+                    _effectiveVoiceRemindMode == _VoiceRemindMode.record &&
+                    voiceRecordFootnote != null)
                   AppFootnote(
-                    text: _isRecording
-                        ? l10n.reminderRecordingInProgress
-                        : (_recordingPath != null && _recordingPath!.isNotEmpty
-                            ? l10n.reminderRecordingSaved
-                            : l10n.reminderRecordingRequired),
+                    text: voiceRecordFootnote,
                     color: _isRecording
                         ? AppTheme.primaryColor
-                        : (_recordingPath != null && _recordingPath!.isNotEmpty
-                            ? null
-                            : scheme.error),
+                        : (_voiceRecordStatus.hasSelection ? null : scheme.error),
                     padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),
                   ),
               ],

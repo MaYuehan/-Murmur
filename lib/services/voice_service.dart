@@ -4,7 +4,9 @@ import 'dart:io';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:murmur/core/utils/app_settings_storage.dart';
+import 'package:murmur/core/utils/reminder_storage.dart';
 import 'package:murmur/core/utils/voice_recording_storage.dart';
+import 'package:murmur/models/reminder.dart';
 import 'package:murmur/models/voice_recording_entry.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
@@ -231,6 +233,25 @@ class VoiceService {
   static Future<void> deleteRecording(String filePath) async {
     await VoiceRecordingStorage.deleteRecording(filePath);
     notifyRecordingsChanged();
+  }
+
+  static Future<void> deleteRecordingIfUnused(String filePath) async {
+    if (filePath.isEmpty) {
+      return;
+    }
+    if (ReminderStorage.isVoicePathReferenced(filePath)) {
+      return;
+    }
+    await deleteRecording(filePath);
+  }
+
+  static Future<void> purgeExpiredRecordingsFromStorage() async {
+    final Set<String> protectedPaths = ReminderStorage.loadReminders()
+        .map((Reminder reminder) => reminder.voicePath)
+        .whereType<String>()
+        .where((String path) => path.isNotEmpty)
+        .toSet();
+    await purgeExpiredRecordings(protectedPaths);
   }
 
   static Future<void> purgeExpiredRecordings(Set<String> protectedPaths) async {

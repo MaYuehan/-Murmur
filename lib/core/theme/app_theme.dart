@@ -154,6 +154,8 @@ class AppTheme {
         style: FilledButton.styleFrom(
           backgroundColor: primaryColor,
           foregroundColor: Colors.white,
+          disabledBackgroundColor: const Color(0xFFE5E5EA),
+          disabledForegroundColor: secondaryLabelColor,
           elevation: 0,
           minimumSize: const Size.fromHeight(50),
           shape: RoundedRectangleBorder(

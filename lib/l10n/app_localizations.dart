@@ -438,13 +438,29 @@ class AppLocalizations {
   String get voiceRecordingSavedToast => _t('已收藏', 'Saved');
   String get voiceUnsaveRecordingTitle => _t('取消收藏', 'Remove from saved');
   String voiceUnsaveRecordingMessage(String name) =>
-      _t('确定取消收藏「$name」吗？录音将移回近 7 天列表。', 'Remove "$name" from saved? It will move back to your last 7 days list.');
+      _t(
+        '确定取消收藏「$name」吗？录音将移回近 7 天列表，剩余天数按原录制时间计算。',
+        'Remove "$name" from saved? It moves back to your last 7 days list; remaining days are based on when it was first recorded.',
+      );
+  String voiceUnsaveRecordingMessageWithReminders(String name, int count) =>
+      _t(
+        '确定取消收藏「$name」吗？录音将移回近 7 天列表，剩余天数按原录制时间计算。\n\n当前有 $count 条提醒正在使用此录音。提醒不会被删除，但录音过期后亲声可能无法播放。',
+        'Remove "$name" from saved? It moves back to your last 7 days list; remaining days are based on when it was first recorded.\n\n$count reminders use this recording. They will stay, but voice playback may fail after the recording expires.',
+      );
   String get voiceUnsaveRecordingConfirm => _t('取消收藏', 'Remove');
   String get voiceRecordingUnsavedToast => _t('已取消收藏', 'Removed from saved');
   String get voicePickSavedRecording => _t('收藏录音', 'Saved recording');
   String get voicePickSavedRecordingTitle => _t('选择收藏录音', 'Choose saved recording');
   String get voiceRecordInputTab => _t('录制', 'Record');
   String get voiceSavedInputTab => _t('收藏', 'Saved');
+  String get voiceRecordTabEmptyHint => _t(
+        '请按住录音，或切换到收藏选择已保存的录音',
+        'Hold to record, or switch to Saved to pick a recording',
+      );
+  String get voiceSavedTabEmptyHint => _t(
+        '请选择收藏录音，或切换到录制新录音',
+        'Pick a saved recording, or switch to Record to record a new one',
+      );
   String get voiceOrDivider => _t('或', 'or');
   String get voiceLocalRecording => _t('临时录音', 'Temporary recording');
   String get voiceMyRecording => _t('我的录音', 'My recording');

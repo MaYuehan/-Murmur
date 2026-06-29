@@ -87,8 +87,13 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
   List<int> _remindRepeatDays = <int>[];
   String _voiceSelection = VoiceService.defaultVoiceId;
   _VoiceRemindMode _voiceRemindMode = _VoiceRemindMode.textAndPreset;
+  _VoiceRemindMode _effectiveVoiceRemindMode = _VoiceRemindMode.textAndPreset;
   String? _recordingPath;
   bool _isRecording = false;
+  VoiceRecordPanelStatus _voiceRecordStatus = const VoiceRecordPanelStatus(
+    inputMode: VoiceRecordInputMode.record,
+    hasSelection: false,
+  );
   String? _selectedTodoGroupId;
   _ExpandedField _expandedField = _ExpandedField.none;
 
@@ -143,6 +148,7 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
         existing.voicePath != null &&
         existing.voicePath!.isNotEmpty) {
       _voiceRemindMode = _VoiceRemindMode.record;
+      _effectiveVoiceRemindMode = _VoiceRemindMode.record;
       _recordingPath = existing.voicePath;
     }
     if (existing.hasDeadline && existing.remindEnabled) {
@@ -247,11 +253,37 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
   bool get _presetVoiceValid =>
       VoiceService.presetVoices.any((VoiceOption v) => v.id == _voiceSelection);
 
+  void _commitTextVoiceMode() {
+    if (_effectiveVoiceRemindMode == _VoiceRemindMode.textAndPreset) {
+      return;
+    }
+    _effectiveVoiceRemindMode = _VoiceRemindMode.textAndPreset;
+    _recordingPath = null;
+  }
+
+  void _commitRecordVoiceMode(String path) {
+    if (_effectiveVoiceRemindMode == _VoiceRemindMode.record &&
+        _recordingPath == path) {
+      return;
+    }
+    _effectiveVoiceRemindMode = _VoiceRemindMode.record;
+    _recordingPath = path;
+    _remindTextController.clear();
+  }
+
+  void _onRecordingPathChanged(String? path) {
+    if (path != null && path.isNotEmpty) {
+      _setStatePreservingScroll(() => _commitRecordVoiceMode(path));
+      return;
+    }
+    _setStatePreservingScroll(() => _recordingPath = path);
+  }
+
   bool _isVoiceRemindReady() {
     if (!_voiceRemindEnabled) {
       return true;
     }
-    if (_voiceRemindMode == _VoiceRemindMode.textAndPreset) {
+    if (_effectiveVoiceRemindMode == _VoiceRemindMode.textAndPreset) {
       return _remindTextController.text.trim().isNotEmpty && _presetVoiceValid;
     }
     return _recordingPath != null && _recordingPath!.isNotEmpty;
@@ -302,7 +334,10 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
       );
       return;
     }
-    _setStatePreservingScroll(() => _remindTextController.text = title);
+    _setStatePreservingScroll(() {
+      _commitTextVoiceMode();
+      _remindTextController.text = title;
+    });
   }
 
   Future<void> _pickRemindOffset() async {
@@ -450,7 +485,10 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
     if (picked == null || !mounted) {
       return;
     }
-    setState(() => _voiceSelection = picked);
+    setState(() {
+      _commitTextVoiceMode();
+      _voiceSelection = picked;
+    });
     _restoreScrollOffset(scrollOffset);
   }
 
@@ -604,7 +642,7 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
     final String notes = _notesController.text.trim();
     final DateTime? finalRemindAt = _computedRemindAt;
     final String? remindText = _voiceRemindEnabled &&
-            _voiceRemindMode == _VoiceRemindMode.textAndPreset
+            _effectiveVoiceRemindMode == _VoiceRemindMode.textAndPreset
         ? _remindTextController.text.trim()
         : null;
 
@@ -615,7 +653,7 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
     bool isCustomVoice = false;
 
     if (_voiceRemindEnabled) {
-      if (_voiceRemindMode == _VoiceRemindMode.record) {
+      if (_effectiveVoiceRemindMode == _VoiceRemindMode.record) {
         soundId = 'my_recorded_voice';
         voiceId = 'my_recorded_voice';
         voicePath = _recordingPath;
@@ -682,6 +720,14 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
     final List<TodoGroup> todoGroups = ref.watch(todoGroupListProvider);
     final DateTime? remindPreview = _computedRemindAt;
     final ColorScheme scheme = Theme.of(context).colorScheme;
+    final String? voiceRecordFootnote =
+        _effectiveVoiceRemindMode == _VoiceRemindMode.record
+        ? VoiceRecordPanelStatus.footnoteFor(
+            l10n: l10n,
+            status: _voiceRecordStatus,
+            isRecording: _isRecording,
+          )
+        : null;
 
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
@@ -990,7 +1036,9 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
                               label: l10n.reminderRemindText,
                               controller: _remindTextController,
                               hintText: l10n.reminderRemindTextHint,
-                              onChanged: (_) => setState(() {}),
+                              onChanged: (_) {
+                                _setStatePreservingScroll(_commitTextVoiceMode);
+                              },
                             ),
                             AppDetailActionTile(
                               icon: Icons.content_copy_outlined,
@@ -1018,11 +1066,12 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
                               padding: const EdgeInsets.fromLTRB(14, 8, 14, 14),
                               child: VoiceRecordPanel(
                                 recordingPath: _recordingPath,
-                                onRecordingPathChanged: (String? path) {
-                                  _setStatePreservingScroll(() => _recordingPath = path);
-                                },
+                                onRecordingPathChanged: _onRecordingPathChanged,
                                 onRecordingStateChanged: (bool recording) {
                                   _setStatePreservingScroll(() => _isRecording = recording);
+                                },
+                                onStatusChanged: (VoiceRecordPanelStatus status) {
+                                  _setStatePreservingScroll(() => _voiceRecordStatus = status);
                                 },
                               ),
                             ),
@@ -1030,7 +1079,7 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
                       ],
                     ),
                     if (_voiceRemindEnabled &&
-                        _voiceRemindMode == _VoiceRemindMode.textAndPreset &&
+                        _effectiveVoiceRemindMode == _VoiceRemindMode.textAndPreset &&
                         (_remindTextController.text.trim().isEmpty ||
                             !_presetVoiceValid))
                       AppFootnote(
@@ -1039,18 +1088,13 @@ class _CreateTodoSheetState extends ConsumerState<CreateTodoSheet> {
                         padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),
                       ),
                     if (_voiceRemindEnabled &&
-                        _voiceRemindMode == _VoiceRemindMode.record)
+                        _effectiveVoiceRemindMode == _VoiceRemindMode.record &&
+                        voiceRecordFootnote != null)
                       AppFootnote(
-                        text: _isRecording
-                            ? l10n.reminderRecordingInProgress
-                            : (_recordingPath != null && _recordingPath!.isNotEmpty
-                                ? l10n.reminderRecordingSaved
-                                : l10n.reminderRecordingRequired),
+                        text: voiceRecordFootnote,
                         color: _isRecording
                             ? AppTheme.primaryColor
-                            : (_recordingPath != null && _recordingPath!.isNotEmpty
-                                ? null
-                                : scheme.error),
+                            : (_voiceRecordStatus.hasSelection ? null : scheme.error),
                         padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),
                       ),
                   ],

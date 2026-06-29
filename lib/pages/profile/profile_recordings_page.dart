@@ -1,20 +1,23 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:murmur/core/theme/app_theme.dart';
 import 'package:murmur/l10n/app_localizations.dart';
+import 'package:murmur/models/reminder.dart';
 import 'package:murmur/models/voice_recording_entry.dart';
+import 'package:murmur/providers/reminder_provider.dart';
 import 'package:murmur/services/voice_service.dart';
 import 'package:murmur/widgets/app_ui.dart';
 
-class ProfileRecordingsPage extends StatefulWidget {
+class ProfileRecordingsPage extends ConsumerStatefulWidget {
   const ProfileRecordingsPage({super.key});
 
   @override
-  State<ProfileRecordingsPage> createState() => _ProfileRecordingsPageState();
+  ConsumerState<ProfileRecordingsPage> createState() => _ProfileRecordingsPageState();
 }
 
-class _ProfileRecordingsPageState extends State<ProfileRecordingsPage> {
+class _ProfileRecordingsPageState extends ConsumerState<ProfileRecordingsPage> {
   List<VoiceRecordingEntry> _saved = <VoiceRecordingEntry>[];
   List<VoiceRecordingEntry> _temporary = <VoiceRecordingEntry>[];
   bool _isPlaying = false;
@@ -121,12 +124,23 @@ class _ProfileRecordingsPageState extends State<ProfileRecordingsPage> {
 
   Future<void> _unsaveRecording(VoiceRecordingEntry entry) async {
     final AppLocalizations l10n = AppLocalizations.of(context);
+    final int reminderUsageCount = ref
+        .read(reminderListProvider)
+        .where((Reminder reminder) => reminder.voicePath == entry.filePath)
+        .length;
     final bool? confirmed = await showDialog<bool>(
       context: context,
       builder: (BuildContext dialogContext) {
         return AlertDialog(
           title: Text(l10n.voiceUnsaveRecordingTitle),
-          content: Text(l10n.voiceUnsaveRecordingMessage(entry.displayName)),
+          content: Text(
+            reminderUsageCount > 0
+                ? l10n.voiceUnsaveRecordingMessageWithReminders(
+                    entry.displayName,
+                    reminderUsageCount,
+                  )
+                : l10n.voiceUnsaveRecordingMessage(entry.displayName),
+          ),
           actions: <Widget>[
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(false),
@@ -146,7 +160,14 @@ class _ProfileRecordingsPageState extends State<ProfileRecordingsPage> {
     if (_playingId == entry.filePath) {
       await _stopVoice();
     }
-    await VoiceService.removeRecordingFromLibrary(savedPath: entry.filePath);
+    final String oldPath = entry.filePath;
+    final VoiceRecordingEntry moved = await VoiceService.removeRecordingFromLibrary(
+      savedPath: oldPath,
+    );
+    await ref.read(reminderListProvider.notifier).remapVoicePath(
+          oldPath,
+          moved.filePath,
+        );
     if (!mounted) {
       return;
     }

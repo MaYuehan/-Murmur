@@ -979,6 +979,37 @@ class ReminderNotifier extends StateNotifier<List<Reminder>> {
     return null;
   }
 
+  Future<void> remapVoicePath(String oldPath, String newPath) async {
+    if (oldPath.isEmpty || newPath.isEmpty || oldPath == newPath) {
+      return;
+    }
+
+    final List<String> updatedIds = <String>[];
+    final List<Reminder> next = state.map((Reminder reminder) {
+      if (reminder.voicePath == oldPath) {
+        updatedIds.add(reminder.id);
+        return reminder.copyWith(voicePath: newPath);
+      }
+      return reminder;
+    }).toList();
+
+    if (updatedIds.isEmpty) {
+      return;
+    }
+
+    state = next;
+    await ReminderStorage.saveReminders(state);
+
+    for (final String id in updatedIds) {
+      final Reminder? reminder = getReminderById(id);
+      if (reminder == null) {
+        continue;
+      }
+      await _cancelLinkedPairNotifications(reminder);
+      await _scheduleNotificationsIfNeeded(reminder);
+    }
+  }
+
   Reminder? getLinkedTodoForCalendarReminder(String calendarReminderId) {
     final Reminder? calendarReminder = getReminderById(calendarReminderId);
     if (calendarReminder?.linkedTodoId == null) {

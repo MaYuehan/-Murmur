@@ -8,7 +8,34 @@ import 'package:murmur/models/voice_recording_entry.dart';
 import 'package:murmur/services/voice_service.dart';
 import 'package:murmur/widgets/app_ui.dart';
 
-enum _RecordInputMode { record, saved }
+enum VoiceRecordInputMode { record, saved }
+
+class VoiceRecordPanelStatus {
+  const VoiceRecordPanelStatus({
+    required this.inputMode,
+    required this.hasSelection,
+  });
+
+  final VoiceRecordInputMode inputMode;
+  final bool hasSelection;
+
+  static String? footnoteFor({
+    required AppLocalizations l10n,
+    required VoiceRecordPanelStatus status,
+    required bool isRecording,
+  }) {
+    if (isRecording) {
+      return l10n.reminderRecordingInProgress;
+    }
+    if (status.hasSelection) {
+      return null;
+    }
+    if (status.inputMode == VoiceRecordInputMode.saved) {
+      return l10n.voiceSavedTabEmptyHint;
+    }
+    return l10n.voiceRecordTabEmptyHint;
+  }
+}
 
 class VoiceRecordPanel extends StatefulWidget {
   const VoiceRecordPanel({
@@ -16,11 +43,13 @@ class VoiceRecordPanel extends StatefulWidget {
     this.recordingPath,
     required this.onRecordingPathChanged,
     this.onRecordingStateChanged,
+    this.onStatusChanged,
   });
 
   final String? recordingPath;
   final ValueChanged<String?> onRecordingPathChanged;
   final ValueChanged<bool>? onRecordingStateChanged;
+  final ValueChanged<VoiceRecordPanelStatus>? onStatusChanged;
 
   @override
   State<VoiceRecordPanel> createState() => _VoiceRecordPanelState();
@@ -34,7 +63,8 @@ class _VoiceRecordPanelState extends State<VoiceRecordPanel> {
   static const double _rerecordActiveRingSize = 80;
   static const double _compactControlHeight = 44;
 
-  _RecordInputMode _inputMode = _RecordInputMode.record;
+  VoiceRecordInputMode _inputMode = VoiceRecordInputMode.record;
+  VoiceRecordInputMode _committedInputMode = VoiceRecordInputMode.record;
   String? _tempRecordingPath;
   String? _savedRecordingPath;
   bool _isRecording = false;
@@ -45,14 +75,14 @@ class _VoiceRecordPanelState extends State<VoiceRecordPanel> {
   StreamSubscription<void>? _recordingsChangedSub;
   List<VoiceRecordingEntry> _savedRecordings = <VoiceRecordingEntry>[];
 
-  String? get _activePath => _inputMode == _RecordInputMode.record
+  String? get _committedPath => _committedInputMode == VoiceRecordInputMode.record
       ? _tempRecordingPath
       : _savedRecordingPath;
 
   @override
   void initState() {
     super.initState();
-    _applyExternalPath(widget.recordingPath);
+    _applyExternalPath(widget.recordingPath, notifyStatus: false);
     unawaited(_loadSavedRecordings());
     _playbackSub = VoiceService.onPlaybackComplete.listen((_) {
       if (!mounted) {
@@ -66,32 +96,82 @@ class _VoiceRecordPanelState extends State<VoiceRecordPanel> {
       }
       unawaited(_loadSavedRecordings());
     });
+    _scheduleSyncStatus();
   }
 
   @override
   void didUpdateWidget(covariant VoiceRecordPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.recordingPath != widget.recordingPath) {
-      _applyExternalPath(widget.recordingPath);
+      _applyExternalPath(widget.recordingPath, notifyStatus: false);
+      _scheduleSyncStatus();
     }
   }
 
-  void _applyExternalPath(String? path) {
-    if (path == null || path.isEmpty) {
+  void _applyExternalPath(String? path, {bool notifyStatus = true}) {
+    void apply() {
+      if (path == null || path.isEmpty) {
+        _tempRecordingPath = null;
+        _savedRecordingPath = null;
+        _inputMode = VoiceRecordInputMode.record;
+        _committedInputMode = VoiceRecordInputMode.record;
+        return;
+      }
+      if (path.contains('/saved/')) {
+        _savedRecordingPath = path;
+        _inputMode = VoiceRecordInputMode.saved;
+        _committedInputMode = VoiceRecordInputMode.saved;
+      } else {
+        _tempRecordingPath = path;
+        _inputMode = VoiceRecordInputMode.record;
+        _committedInputMode = VoiceRecordInputMode.record;
+      }
+    }
+
+    if (!notifyStatus) {
+      apply();
       return;
     }
-    if (path.contains('/saved/')) {
-      _savedRecordingPath = path;
-      _inputMode = _RecordInputMode.saved;
+
+    if (mounted) {
+      setState(apply);
+      _scheduleSyncStatus();
     } else {
-      _tempRecordingPath = path;
-      _inputMode = _RecordInputMode.record;
+      apply();
     }
+  }
+
+  VoiceRecordPanelStatus _buildStatus() {
+    final bool hasSelection =
+        _committedPath != null && _committedPath!.isNotEmpty;
+    return VoiceRecordPanelStatus(
+      inputMode: hasSelection ? _committedInputMode : _inputMode,
+      hasSelection: hasSelection,
+    );
+  }
+
+  bool _statusSyncScheduled = false;
+
+  void _scheduleSyncStatus() {
+    if (!mounted || widget.onStatusChanged == null || _statusSyncScheduled) {
+      return;
+    }
+    _statusSyncScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _statusSyncScheduled = false;
+      if (!mounted || widget.onStatusChanged == null) {
+        return;
+      }
+      widget.onStatusChanged!(_buildStatus());
+    });
   }
 
   @override
   void dispose() {
     _maxDurationTimer?.cancel();
+    if (_isRecording || _holdActive) {
+      unawaited(VoiceService.stopRecording());
+    }
     unawaited(_playbackSub?.cancel());
     unawaited(_recordingsChangedSub?.cancel());
     if (_isPreviewPlaying) {
@@ -110,10 +190,11 @@ class _VoiceRecordPanelState extends State<VoiceRecordPanel> {
       if (_savedRecordingPath != null &&
           !saved.any((VoiceRecordingEntry entry) => entry.filePath == _savedRecordingPath)) {
         _savedRecordingPath = null;
-        if (_inputMode == _RecordInputMode.saved) {
-          widget.onRecordingPathChanged(null);
+        if (_committedInputMode == VoiceRecordInputMode.saved) {
+          _notifyCommittedPath();
         }
       }
+      _scheduleSyncStatus();
     });
   }
 
@@ -137,11 +218,12 @@ class _VoiceRecordPanelState extends State<VoiceRecordPanel> {
     setState(() => _isPreviewPlaying = false);
   }
 
-  void _notifyActivePath() {
-    widget.onRecordingPathChanged(_activePath);
+  void _notifyCommittedPath() {
+    widget.onRecordingPathChanged(_committedPath);
+    _scheduleSyncStatus();
   }
 
-  Future<void> _selectInputMode(_RecordInputMode mode) async {
+  Future<void> _selectInputMode(VoiceRecordInputMode mode) async {
     if (_inputMode == mode) {
       return;
     }
@@ -150,7 +232,7 @@ class _VoiceRecordPanelState extends State<VoiceRecordPanel> {
       return;
     }
     setState(() => _inputMode = mode);
-    _notifyActivePath();
+    _scheduleSyncStatus();
   }
 
   Future<void> _pickSavedRecording() async {
@@ -178,14 +260,21 @@ class _VoiceRecordPanelState extends State<VoiceRecordPanel> {
     if (picked == null || picked.isEmpty || !mounted) {
       return;
     }
-    if (picked == _savedRecordingPath && _inputMode == _RecordInputMode.saved) {
+    if (picked == _savedRecordingPath &&
+        _committedInputMode == VoiceRecordInputMode.saved) {
       return;
     }
+    final String? previousTemp = _tempRecordingPath;
     setState(() {
       _savedRecordingPath = picked;
-      _inputMode = _RecordInputMode.saved;
+      _inputMode = VoiceRecordInputMode.saved;
+      _committedInputMode = VoiceRecordInputMode.saved;
+      _tempRecordingPath = null;
     });
-    _notifyActivePath();
+    _notifyCommittedPath();
+    if (previousTemp != null && previousTemp.isNotEmpty) {
+      unawaited(VoiceService.deleteRecordingIfUnused(previousTemp));
+    }
   }
 
   void _setRecording(bool value) {
@@ -194,6 +283,7 @@ class _VoiceRecordPanelState extends State<VoiceRecordPanel> {
     }
     setState(() => _isRecording = value);
     widget.onRecordingStateChanged?.call(value);
+    _scheduleSyncStatus();
   }
 
   Future<void> _beginRecording() async {
@@ -228,6 +318,7 @@ class _VoiceRecordPanelState extends State<VoiceRecordPanel> {
     if (!_isRecording && !_holdActive) {
       return;
     }
+    final String? previousPath = _tempRecordingPath;
     final String? path = await VoiceService.stopRecording();
     if (!mounted) {
       return;
@@ -236,11 +327,22 @@ class _VoiceRecordPanelState extends State<VoiceRecordPanel> {
       _holdActive = false;
       if (path != null && path.isNotEmpty) {
         _tempRecordingPath = path;
-        _inputMode = _RecordInputMode.record;
+        _inputMode = VoiceRecordInputMode.record;
+        _committedInputMode = VoiceRecordInputMode.record;
+        _savedRecordingPath = null;
       }
     });
     _setRecording(false);
-    _notifyActivePath();
+    if (path != null && path.isNotEmpty) {
+      _notifyCommittedPath();
+    }
+    if (previousPath != null &&
+        previousPath.isNotEmpty &&
+        path != null &&
+        path.isNotEmpty &&
+        previousPath != path) {
+      unawaited(VoiceService.deleteRecordingIfUnused(previousPath));
+    }
   }
 
   Future<void> _togglePreview() async {
@@ -266,19 +368,19 @@ class _VoiceRecordPanelState extends State<VoiceRecordPanel> {
     return Padding(
       padding: const EdgeInsets.fromLTRB(0, 0, 0, 12),
       child: Center(
-        child: AppUnderlineTabControl<_RecordInputMode>(
-          options: <AppSegmentOption<_RecordInputMode>>[
+        child: AppUnderlineTabControl<VoiceRecordInputMode>(
+          options: <AppSegmentOption<VoiceRecordInputMode>>[
             AppSegmentOption(
-              value: _RecordInputMode.record,
+              value: VoiceRecordInputMode.record,
               label: l10n.voiceRecordInputTab,
             ),
             AppSegmentOption(
-              value: _RecordInputMode.saved,
+              value: VoiceRecordInputMode.saved,
               label: l10n.voiceSavedInputTab,
             ),
           ],
           selected: _inputMode,
-          onChanged: (_RecordInputMode mode) => unawaited(_selectInputMode(mode)),
+          onChanged: (VoiceRecordInputMode mode) => unawaited(_selectInputMode(mode)),
         ),
       ),
     );
@@ -517,7 +619,7 @@ class _VoiceRecordPanelState extends State<VoiceRecordPanel> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           _buildInputModeSelector(l10n),
-          if (_savedRecordings.isEmpty || _inputMode == _RecordInputMode.record)
+          if (_savedRecordings.isEmpty || _inputMode == VoiceRecordInputMode.record)
             _buildRecordSection(l10n)
           else
             _buildSavedSection(l10n),

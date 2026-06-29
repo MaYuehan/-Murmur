@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -110,7 +112,7 @@ class AppShell extends StatefulWidget {
   State<AppShell> createState() => _AppShellState();
 }
 
-class _AppShellState extends State<AppShell> {
+class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   int _selectedIndex = 0;
 
   static const List<Widget> _pages = <Widget>[
@@ -123,13 +125,22 @@ class _AppShellState extends State<AppShell> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     appTabIndexNotifier.addListener(_syncTabFromNotifier);
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     appTabIndexNotifier.removeListener(_syncTabFromNotifier);
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(VoiceService.purgeExpiredRecordingsFromStorage());
+    }
   }
 
   void _syncTabFromNotifier() {

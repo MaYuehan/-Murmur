@@ -29,6 +29,14 @@ class ReminderStorage {
     await box.put(_allRemindersKey, data);
   }
 
+  static bool isVoicePathReferenced(String path, {List<Reminder>? reminders}) {
+    if (path.isEmpty) {
+      return false;
+    }
+    final List<Reminder> list = reminders ?? loadReminders();
+    return list.any((Reminder reminder) => reminder.voicePath == path);
+  }
+
   static List<TodoGroup> loadTodoGroups() {
     final Box<List<dynamic>> box = Hive.box<List<dynamic>>(_boxName);
     final List<dynamic> rawList = box.get(_allTodoGroupsKey) ?? <dynamic>[];
